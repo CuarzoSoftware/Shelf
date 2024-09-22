@@ -7,9 +7,9 @@
 
 #include <KDesktopFile>
 
-#include <Manager.h>
+#include <Global.h>
 
-void Manager::loadConfig()
+void Global::loadConfig()
 {
     auto homeLocations = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
 
