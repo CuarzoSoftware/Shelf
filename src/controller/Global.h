@@ -17,7 +17,6 @@ private:
 
     Global() noexcept { loadConfig(); }
 
-    QDir homeDir;
 };
 
 #endif // GLOBAL_H
