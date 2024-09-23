@@ -1,10 +1,12 @@
 #include <LayerShellQt/Shell>
 #include <QPropertyAnimation>
+#include <QLabel>
 #include <QDebug>
 
 #include <controller/Shelf.h>
 #include <widgets/Dock.h>
 #include <widgets/DockElevator.h>
+#include <widgets/DockWidget.h>
 
 using namespace LayerShellQt;
 
@@ -37,13 +39,12 @@ Dock::~Dock()
 
 void Dock::setDockVisible(bool visible) noexcept
 {
+    updateDimensions();
     isDockVisible = visible;
 
     if (dockElevator->slideUpAnim->state() == QAbstractAnimation::Running ||
         dockElevator->slideDownAnim->state() == QAbstractAnimation::Running)
         return;
-
-    dockElevator->setFixedSize(width(), 96);
 
     auto &shell { *LayerShellQt::Window::get(windowHandle()) };
 
@@ -62,6 +63,32 @@ void Dock::setDockVisible(bool visible) noexcept
         dockElevator->slideDownAnim->setStartValue(QPoint(0, -dockElevator->height()));
         dockElevator->slideDownAnim->setEndValue(QPoint(0, 2));
         dockElevator->slideDownAnim->start();
+    }
+}
+
+void Dock::updateDimensions() noexcept
+{
+    itemSize.setWidth(dockScale * 62);
+    itemSize.setHeight(itemSize.width());
+    itemsSpacing = itemSize.width() * 0.18;
+    dockBorderRadius = itemSize.width() * 0.38;
+    dockMargins.setTop(itemSize.width() * 0.18);
+    dockMargins.setLeft(dockMargins.top());
+    dockMargins.setRight(dockMargins.top());
+    dockMargins.setBottom(itemSize.width() * 0.26);
+    dockSize.setHeight(dockMargins.top() + dockMargins.bottom() + itemSize.height());
+
+    dockElevator->dockWidget->layout->setContentsMargins(dockMargins);
+    dockElevator->dockWidget->layout->setSpacing(itemsSpacing);
+    dockElevator->dockWidget->setFixedHeight(dockSize.height());
+    dockElevator->dockWidget->setStyleSheet(
+        ".QFrame{background: qlineargradient(spread:pad, x1:0, y1:0.5, x2:1, y2:0.5, stop:0 #3c27ac, stop:1 #5d1eff); border: 1px solid rgba(0,0,0,0.1); border-radius: " + QString::number(dockBorderRadius) + "px;}");
+    dockElevator->setFixedSize(width(), dockSize.height() + 42);
+
+    for (int i = 0; i < dockElevator->dockWidget->layout->count(); i++)
+    {
+        auto *it = dockElevator->dockWidget->layout->itemAt(i);
+        static_cast<QLabel*>(it->widget())->setFixedSize(itemSize);
     }
 }
 

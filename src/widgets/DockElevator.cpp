@@ -7,8 +7,8 @@ DockElevator::DockElevator(Dock &dock) :
     dock(dock),
     dockWidget(new DockWidget(dock))
 {
-    slideUpAnim->setDuration(200);
-    slideDownAnim->setDuration(200);
+    slideUpAnim->setDuration(300);
+    slideDownAnim->setDuration(slideUpAnim->duration());
 
     connect(slideUpAnim, &QPropertyAnimation::finished, [this]()
     {

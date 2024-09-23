@@ -25,6 +25,14 @@ public:
 
     void setDockVisible(bool visible) noexcept;
     bool isDockVisible { false };
+
+    void updateDimensions() noexcept;
+    double dockScale { 1.0 };
+    QSize itemSize;
+    int itemsSpacing;
+    int dockBorderRadius;
+    QMargins dockMargins;
+    QSize dockSize;
 };
 
 #endif // DOCK_H

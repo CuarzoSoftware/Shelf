@@ -35,6 +35,7 @@ add_executable(cuarzo-shelf
     src/widgets/DockWidget.h src/widgets/DockWidget.cpp
     src/controller/Shelf.h src/controller/Shelf.cpp
     src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h
+    src/widgets/DockItem.h src/widgets/DockItem.cpp
 )
 
 target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)

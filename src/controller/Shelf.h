@@ -15,6 +15,11 @@ public:
     Shelf(int &argc, char **argv);
     void loadConfig() noexcept;
 
+    static Shelf &get()
+    {
+        return *static_cast<Shelf*>(QApplication::instance());
+    }
+
     void onScreenAdded(QScreen *screen) noexcept;
     void onScreenRemoved(QScreen *screen) noexcept;
 
