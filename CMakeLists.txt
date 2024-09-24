@@ -36,6 +36,10 @@ add_executable(cuarzo-shelf
     src/controller/Shelf.h src/controller/Shelf.cpp
     src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h
     src/widgets/DockItem.h src/widgets/DockItem.cpp
+    src/controller/ItemController.h src/controller/ItemController.cpp
+    src/controller/ToplevelHandle.h src/controller/ToplevelHandle.cpp
+    src/controller/TrashController.h src/controller/TrashController.cpp
+
 )
 
 target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)

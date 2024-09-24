@@ -7,6 +7,7 @@
 #include <widgets/Dock.h>
 #include <widgets/DockElevator.h>
 #include <widgets/DockWidget.h>
+#include <widgets/DockItem.h>
 
 using namespace LayerShellQt;
 
@@ -28,6 +29,7 @@ Dock::Dock(QScreen *screen) noexcept : QWidget(),
 
     dockElevator->windowHandle()->setParent(windowHandle());
     dockElevator->hide();
+    updateDimensions();
 
     qInfo() << "Dock added to screen" << screen->name();
 }
@@ -39,7 +41,6 @@ Dock::~Dock()
 
 void Dock::setDockVisible(bool visible) noexcept
 {
-    updateDimensions();
     isDockVisible = visible;
 
     if (dockElevator->slideUpAnim->state() == QAbstractAnimation::Running ||
@@ -66,6 +67,12 @@ void Dock::setDockVisible(bool visible) noexcept
     }
 }
 
+void Dock::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateDimensions();
+}
+
 void Dock::updateDimensions() noexcept
 {
     itemSize.setWidth(dockScale * 62);
@@ -85,10 +92,13 @@ void Dock::updateDimensions() noexcept
         ".QFrame{background: qlineargradient(spread:pad, x1:0, y1:0.5, x2:1, y2:0.5, stop:0 #3c27ac, stop:1 #5d1eff); border: 1px solid rgba(0,0,0,0.1); border-radius: " + QString::number(dockBorderRadius) + "px;}");
     dockElevator->setFixedSize(width(), dockSize.height() + 42);
 
+    dockElevator->windowHandle()->setMask(QRegion(0, 32, dockElevator->width(), dockElevator->height()));
+
     for (int i = 0; i < dockElevator->dockWidget->layout->count(); i++)
     {
         auto *it = dockElevator->dockWidget->layout->itemAt(i);
-        static_cast<QLabel*>(it->widget())->setFixedSize(itemSize);
+        if (it->widget() && !it->widget()->property("DockItem").isNull())
+            static_cast<DockItem*>(it->widget())->updateDimensions();
     }
 }
 

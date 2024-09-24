@@ -26,6 +26,7 @@ public:
     void setDockVisible(bool visible) noexcept;
     bool isDockVisible { false };
 
+    void resizeEvent(QResizeEvent *event) override;
     void updateDimensions() noexcept;
     double dockScale { 1.0 };
     QSize itemSize;
