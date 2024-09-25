@@ -12,6 +12,8 @@ class DockWidget final : public QFrame
 {
 public:
     DockWidget(Dock &dock) noexcept;
+    int separatorIndex() const noexcept;
+
     Dock &dock;
     QGraphicsDropShadowEffect *shadowFx { new QGraphicsDropShadowEffect(this) };
     QHBoxLayout *layout { new QHBoxLayout(this) };

@@ -17,7 +17,7 @@ public:
         Trash
     };
 
-    ItemController(Type type, const QString &name, const QPixmap &icon) noexcept;
+    ItemController(Type type, const QString &name, const QPixmap &icon, bool active) noexcept;
     virtual ~ItemController() noexcept;
 
     std::list<DockItem*> &items() noexcept;
@@ -28,6 +28,9 @@ public:
     const QPixmap &icon() const noexcept;
     void setIcon(const QPixmap &icon) noexcept;
 
+    bool active() const noexcept;
+    void setActive(bool active) noexcept;
+
     Type type() const noexcept;
 
 private:
@@ -35,6 +38,7 @@ private:
     QPixmap m_icon;
     QString m_name;
     Type m_type;
+    bool m_active;
 };
 
 #endif // ITEMCONTROLLER_H

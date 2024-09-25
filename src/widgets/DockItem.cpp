@@ -20,7 +20,19 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
     icon->setScaledContents(true);
     icon->setPixmap(controller.icon());
     icon->setFixedSize(36, 36);
-    dock.dockElevator->dockWidget->layout->addWidget(this);
+
+    switch (controller.type())
+    {
+    case ItemController::App:
+        dock.dockElevator->dockWidget->layout->insertWidget(
+            dock.dockElevator->dockWidget->separatorIndex(),
+            this);
+        break;
+    case ItemController::Trash:
+        dock.dockElevator->dockWidget->layout->addWidget(this);
+        break;
+    }
+
     dock.updateDimensions();
 }
 

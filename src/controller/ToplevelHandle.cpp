@@ -1,3 +1,4 @@
+#include "controller/AppController.h"
 #include <controller/ItemController.h>
 #include <protocols/wlr-foreign-toplevel-management-unstable-v1-client.h>
 #include <controller/ToplevelHandle.h>
@@ -23,11 +24,44 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
     {
         auto &handle { *static_cast<ToplevelHandle*>(zwlr_foreign_toplevel_handle_v1_get_user_data(whandle)) };
 
+        handle.currentTitle = handle.pendingTitle;
+
         if (handle.currentAppId != handle.pendingAppId)
         {
+            if (handle.appController)
+                handle.appController->removeToplevelHandle(&handle);
+
             handle.currentAppId = handle.pendingAppId;
 
-            /*
+            AppController *newController { nullptr };
+
+            for (AppController *c : Shelf::get().pinnedApps)
+            {
+                if (c->id() == handle.currentAppId)
+                {
+                    newController = c;
+                    break;
+                }
+            }
+
+            if (!newController)
+            {
+                for (AppController *c : Shelf::get().unpinnedApps)
+                {
+                    if (c->id() == handle.currentAppId)
+                    {
+                        newController = c;
+                        break;
+                    }
+                }
+            }
+
+            if (newController)
+            {
+                newController->addToplevelHandle(&handle);
+                return;
+            }
+
             QString desktopFilePath { Shelf::desktopFileFromAppId(handle.currentAppId) };
             KDesktopFile df(desktopFilePath);
             QString iconName = df.readIcon();
@@ -35,13 +69,9 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
             if (iconName.isNull())
                 iconName = handle.currentAppId;
 
-            new ItemController(ItemController::App, false, df.readName(), handle.currentAppId, desktopFilePath,
-                               Shelf::iconFromName(iconName, 512));*/
-
+            newController = new AppController(iconName, df.readName(), handle.currentAppId, desktopFilePath, false, true);
+            newController->addToplevelHandle(&handle);
         }
-
-
-        handle.currentTitle = handle.pendingTitle;
     },
     .closed         = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle)
     {
@@ -54,12 +84,15 @@ ToplevelHandle::ToplevelHandle(zwlr_foreign_toplevel_handle_v1 *whandle) noexcep
     handle(whandle)
 {
     Shelf::get().toplevelHandles.push_back(this);
-    link = std::prev(Shelf::get().toplevelHandles.end());
+    shelfLink = std::prev(Shelf::get().toplevelHandles.end());
     zwlr_foreign_toplevel_handle_v1_add_listener(whandle, &handleListener, this);
 }
 
 ToplevelHandle::~ToplevelHandle() noexcept
 {
-    Shelf::get().toplevelHandles.erase(link);
+    if (appController)
+        appController->removeToplevelHandle(this);
+
+    Shelf::get().toplevelHandles.erase(shelfLink);
     zwlr_foreign_toplevel_handle_v1_destroy(handle);
 }

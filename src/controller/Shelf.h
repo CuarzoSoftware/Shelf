@@ -9,6 +9,7 @@
 class Dock;
 class ToplevelHandle;
 class ItemController;
+class AppController;
 class TrashController;
 struct zwlr_foreign_toplevel_manager_v1;
 struct wl_display;
@@ -37,11 +38,14 @@ public:
     QVector<Dock*> docks;
 
     // Items
-    std::list<ItemController*> pinnedApps;
-    std::list<ItemController*> unpinnedApps;
+    std::list<AppController*> pinnedApps;
+    std::list<AppController*> unpinnedApps;
     std::list<ItemController*> dirs;
     std::list<ItemController*> thumbnails;
     TrashController *trash;
+
+    // Icons
+    QPixmap defaultAppIcon;
 
     // Wayland
     wl_display *display;

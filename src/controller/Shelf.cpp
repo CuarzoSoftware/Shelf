@@ -76,6 +76,8 @@ Shelf::Shelf(int &argc, char **argv) : QApplication(argc, argv)
         exit(EXIT_FAILURE);
     }
 
+    defaultAppIcon = iconFromName("terminal", 512);
+
     loadConfig();
 
     connect(this, &Shelf::screenAdded, this, &Shelf::onScreenAdded);
