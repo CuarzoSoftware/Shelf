@@ -15,9 +15,7 @@ public:
     void addToplevelHandle(ToplevelHandle *handle) noexcept;
     void removeToplevelHandle(ToplevelHandle *handle) noexcept;
     const std::list<ToplevelHandle*> &toplevelHandles() const noexcept;
-
     const QString &id() const noexcept;
-
 private:
     std::list<AppController*>::iterator shelfLink;
     std::list<ToplevelHandle*> m_toplevelHandles;

@@ -40,6 +40,9 @@ add_executable(cuarzo-shelf
     src/controller/ToplevelHandle.h src/controller/ToplevelHandle.cpp
     src/controller/TrashController.h src/controller/TrashController.cpp
     src/controller/AppController.h src/controller/AppController.cpp
+    src/widgets/Tooltip.h src/widgets/Tooltip.cpp
+    src/widgets/RoundWidget.h src/widgets/RoundWidget.cpp
+    src/widgets/Caret.h src/widgets/Caret.cpp
 
 )
 

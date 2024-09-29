@@ -5,7 +5,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <controller/Shelf.h>
 
-DockWidget::DockWidget(Dock &dock) noexcept : QFrame(&dock),
+DockWidget::DockWidget(Dock &dock) noexcept : RoundWidget(&dock, 0.5, 16, QColor(0,0,0,48), QColor(250,250,250,245)),
     dock(dock)
 {
     shadowFx->setBlurRadius(64);

@@ -65,11 +65,15 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
             QString desktopFilePath { Shelf::desktopFileFromAppId(handle.currentAppId) };
             KDesktopFile df(desktopFilePath);
             QString iconName = df.readIcon();
+            QString name = df.readName();
 
             if (iconName.isNull())
+            {
                 iconName = handle.currentAppId;
+                name = handle.currentAppId;
+            }
 
-            newController = new AppController(iconName, df.readName(), handle.currentAppId, desktopFilePath, false, true);
+            newController = new AppController(iconName, name, handle.currentAppId, desktopFilePath, false, true);
             newController->addToplevelHandle(&handle);
         }
     },

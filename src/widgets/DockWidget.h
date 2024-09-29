@@ -1,14 +1,15 @@
 #ifndef DOCKWIDGET_H
 #define DOCKWIDGET_H
 
-#include <QFrame>
+#include <widgets/RoundWidget.h>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
+#include <QFrame>
 
 class Dock;
 class DockElevator;
 
-class DockWidget final : public QFrame
+class DockWidget final : public RoundWidget
 {
 public:
     DockWidget(Dock &dock) noexcept;

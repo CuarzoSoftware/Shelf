@@ -1,4 +1,6 @@
 #include <controller/ItemController.h>
+#include <controller/Shelf.h>
+#include <widgets/Tooltip.h>
 #include <widgets/DockWidget.h>
 #include <widgets/DockElevator.h>
 #include <widgets/DockItem.h>
@@ -63,4 +65,13 @@ void DockItem::updateDimensions() noexcept
         icon->setFixedWidth((controller.icon().width() * height())/controller.icon().height());
         icon->move((width() - icon->width())/2, 0);
     }
+}
+
+void DockItem::enterEvent(QEnterEvent *)
+{
+    tooltip->showName(this);
+}
+
+void DockItem::leaveEvent(QEvent *)
+{
 }

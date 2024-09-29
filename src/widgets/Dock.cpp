@@ -88,8 +88,9 @@ void Dock::updateDimensions() noexcept
     dockElevator->dockWidget->layout->setContentsMargins(dockMargins);
     dockElevator->dockWidget->layout->setSpacing(itemsSpacing);
     dockElevator->dockWidget->setFixedHeight(dockSize.height());
-    dockElevator->dockWidget->setStyleSheet(
-        ".QFrame{background: qlineargradient(spread:pad, x1:0.5, y1:0.0, x2:0.5, y2:1.0, stop:0 #FFFFFF, stop:1 #FAFAFA); border: 1px solid rgba(0,0,0,0.1); border-radius: " + QString::number(dockBorderRadius) + "px;}");
+    dockElevator->dockWidget->setBorderRadius(dockBorderRadius);
+    //dockElevator->dockWidget->setStyleSheet(
+    //    ".QFrame{background: qlineargradient(spread:pad, x1:0.5, y1:0.0, x2:0.5, y2:1.0, stop:0 #FFFFFF, stop:1 #FAFAFA); border: 1px solid rgba(0,0,0,0.1); border-radius: " + QString::number(dockBorderRadius) + "px;}");
     dockElevator->setFixedSize(width(), dockSize.height() + 42);
 
     dockElevator->windowHandle()->setMask(QRegion(0, 32, dockElevator->width(), dockElevator->height()));

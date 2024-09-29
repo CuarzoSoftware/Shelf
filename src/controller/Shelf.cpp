@@ -18,6 +18,7 @@
 #include <controller/ItemController.h>
 #include <controller/TrashController.h>
 #include <widgets/Dock.h>
+#include <widgets/Tooltip.h>
 
 static const zwlr_foreign_toplevel_manager_v1_listener foreignManagerListener
 {
