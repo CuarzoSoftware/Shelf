@@ -31,7 +31,6 @@ find_package(Wayland REQUIRED)
 add_executable(cuarzo-shelf
     src/main.cpp
     src/widgets/Dock.h src/widgets/Dock.cpp
-    src/widgets/DockElevator.h src/widgets/DockElevator.cpp
     src/widgets/DockWidget.h src/widgets/DockWidget.cpp
     src/controller/Shelf.h src/controller/Shelf.cpp
     src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h
@@ -43,7 +42,7 @@ add_executable(cuarzo-shelf
     src/widgets/Tooltip.h src/widgets/Tooltip.cpp
     src/widgets/RoundWidget.h src/widgets/RoundWidget.cpp
     src/widgets/Caret.h src/widgets/Caret.cpp
-
+    src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
 )
 
 target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)

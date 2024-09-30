@@ -11,6 +11,7 @@ void Caret::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
     QPen pen;
     pen.setColor(QColor(0, 0, 0, 48));
     pen.setWidthF(0.5);

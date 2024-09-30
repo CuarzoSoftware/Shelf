@@ -1,5 +1,5 @@
-#include <wayland-client.h>
 #include <protocols/wlr-foreign-toplevel-management-unstable-v1-client.h>
+#include <wayland-client.h>
 
 #include <qpa/qplatformnativeinterface.h>
 #include <QWidget>
@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QDebug>
 #include <QScreen>
+#include <QPainter>
 
 #include <KDesktopFile>
 
@@ -61,6 +62,8 @@ static const wl_registry_listener registryListener
 
 Shelf::Shelf(int &argc, char **argv) : QApplication(argc, argv)
 {
+    initCreateUIElements();
+
     appsDirs.reserve(16); // XDG_DATA_DIRS/applications
 
     for (const QString &appDir : QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation))
@@ -96,6 +99,18 @@ Shelf::Shelf(int &argc, char **argv) : QApplication(argc, argv)
         qFatal() << "Could not bind to zwlr_foreign_toplevel_manager_v1.";
         exit(EXIT_FAILURE);
     }
+}
+
+void Shelf::initCreateUIElements() noexcept
+{
+    dot = QPixmap(8,8);
+    dot.fill(Qt::transparent);
+    QPainter p(&dot);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setCompositionMode(QPainter::CompositionMode_Source);
+    p.setBrush(QColor(123, 123, 123));
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(0, 0, dot.width(), dot.height());
 }
 
 void Shelf::loadConfig() noexcept

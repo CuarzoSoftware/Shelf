@@ -61,6 +61,9 @@ void ItemController::setActive(bool active) noexcept
 {
     if (active == m_active)
         return;
+
+    for (DockItem *item : m_items)
+        item->dot->setVisible(active);
 }
 
 ItemController::Type ItemController::type() const noexcept

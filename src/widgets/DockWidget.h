@@ -2,9 +2,9 @@
 #define DOCKWIDGET_H
 
 #include <widgets/RoundWidget.h>
+#include <widgets/ItemSeparator.h>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
-#include <QFrame>
 
 class Dock;
 class DockElevator;
@@ -18,7 +18,7 @@ public:
     Dock &dock;
     QGraphicsDropShadowEffect *shadowFx { new QGraphicsDropShadowEffect(this) };
     QHBoxLayout *layout { new QHBoxLayout(this) };
-    QFrame *separator { new QFrame(this) };
+    ItemSeparator *separator;
 };
 
 #endif // DOCKWIDGET_H

@@ -4,7 +4,6 @@
 #include <widgets/DockWidget.h>
 #include <widgets/DockItem.h>
 #include <widgets/Dock.h>
-#include <widgets/DockElevator.h>
 #include <QWindow>
 #include <QTimer>
 
@@ -26,24 +25,23 @@ Tooltip::Tooltip(QWidget *parent) noexcept : QWidget(parent)
 
 void Tooltip::showName(DockItem *item) noexcept
 {
-    if (item->dock.dockElevator->slideDownAnim->state() == QPropertyAnimation::Running ||
-        item->dock.dockElevator->slideUpAnim->state() == QPropertyAnimation::Running)
+    if (item->dock.slideDownAnim->state() == QPropertyAnimation::Running || item->dock.slideUpAnim->state() == QPropertyAnimation::Running)
         return;
 
     if (label->text() != item->controller.name())
         label->setText(item->controller.name());
 
-    const QPoint itemPos { item->mapTo(item->dock.dockElevator, QPoint(0, 0)) };
-    windowHandle()->setParent(item->dock.dockElevator->windowHandle());
+    const QPoint itemPos { item->mapTo(&item->dock, QPoint(0, 0)) };
+    windowHandle()->setParent(item->dock.windowHandle());
     show();
 
-    for (int i = 0; i < item->dock.dockElevator->dockWidget->layout->count(); i++)
+    for (int i = 0; i < item->dock.dockWidget->layout->count(); i++)
     {
-        auto *it = item->dock.dockElevator->dockWidget->layout->itemAt(i);
+        auto *it = item->dock.dockWidget->layout->itemAt(i);
         if (it->widget() && it->widget() != item && !it->widget()->property("DockItem").isNull())
             static_cast<DockItem*>(it->widget())->tooltip->move(0, 1000);
     }
 
-    move(itemPos.x() + (item->width() - width())/2, itemPos.y() -height() - 8);
+    move(itemPos.x() + (item->width() - width())/2, itemPos.y() -height() - item->dock.tooltipDistY);
     caret->move(container->pos() + QPoint((container->width() - caret->width())/2, container->size().height() - 2));
 }

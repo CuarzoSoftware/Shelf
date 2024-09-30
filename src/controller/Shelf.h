@@ -19,6 +19,8 @@ class Shelf final : public QApplication
 {
 public:
     Shelf(int &argc, char **argv);
+
+    void initCreateUIElements() noexcept;
     void loadConfig() noexcept;
 
     static Shelf &get()
@@ -46,6 +48,7 @@ public:
 
     // Icons
     QPixmap defaultAppIcon;
+    QPixmap dot;
 
     // Wayland
     wl_display *display;
