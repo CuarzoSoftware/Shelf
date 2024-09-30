@@ -4,12 +4,19 @@
 #include <widgets/DockWidget.h>
 #include <widgets/DockItem.h>
 #include <widgets/Dock.h>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QDebug>
 
 DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
     QWidget(),
     dock(dock),
     controller(controller)
 {
+    darkFx->setColor(Qt::black);
+    setGraphicsEffect(darkFx);
+    darkFx->setEnabled(false);
+
     setProperty("DockItem", true);
     controller.items().push_back(this);
     controllerLink = std::prev(controller.items().end());
@@ -74,9 +81,36 @@ void DockItem::updateDimensions() noexcept
 
 void DockItem::enterEvent(QEnterEvent *)
 {
+    mouseIsOver = true;
     tooltip->showName(this);
 }
 
 void DockItem::leaveEvent(QEvent *)
 {
+    mouseIsOver = false;
+}
+
+void DockItem::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        QPixmap dark = controller.icon();
+        QPainter p(&dark);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 64));
+        p.drawRect(0,0,dark.width(),dark.height());
+        p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        p.drawPixmap(0, 0, controller.icon());
+        p.end();
+        icon->setPixmap(dark);
+    }
+}
+
+void DockItem::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        controller.onItemClick(this);
+        icon->setPixmap(controller.icon());
+    }
 }

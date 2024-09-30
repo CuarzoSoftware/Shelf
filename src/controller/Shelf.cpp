@@ -80,6 +80,14 @@ Shelf::Shelf(int &argc, char **argv) : QApplication(argc, argv)
         exit(EXIT_FAILURE);
     }
 
+    seat = (wl_seat*)platformNativeInterface()->nativeResourceForIntegration("wl_seat");
+
+    if (!seat)
+    {
+        qFatal() << "Could not get wl_seat. Try running it with --platform wayland.";
+        exit(EXIT_FAILURE);
+    }
+
     defaultAppIcon = iconFromName("terminal", 512);
 
     loadConfig();

@@ -183,12 +183,12 @@ void Dock::updateDimensions() noexcept
     {
         auto *it = dockWidget->layout->itemAt(i);
         if (it->widget() && !it->widget()->property("DockItem").isNull())
+        {
             static_cast<DockItem*>(it->widget())->updateDimensions();
+        }
     }
 
     dockWidget->separator->setFixedHeight(dockWidget->height() - 2 * dockMargins.top());
-
-    update();
 }
 
 int Dock::maxItemSize() const noexcept

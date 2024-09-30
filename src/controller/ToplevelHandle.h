@@ -23,6 +23,10 @@ public:
     std::list<ToplevelHandle*>::iterator appControllerLink;
     AppController *appController { nullptr };
     // ItemController *thumbnailController { nullptr };
+
+
+    void sendActivate() noexcept;
+    void sendMinimized(bool minimized) noexcept;
 };
 
 #endif // TOPLEVELHANDLE_H

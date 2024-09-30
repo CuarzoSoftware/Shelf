@@ -33,6 +33,8 @@ public:
 
     Type type() const noexcept;
 
+    virtual void onItemClick(DockItem *item) noexcept = 0;
+
 private:
     std::list<DockItem*> m_items;
     QPixmap m_icon;

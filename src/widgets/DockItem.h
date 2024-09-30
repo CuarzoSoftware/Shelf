@@ -1,6 +1,7 @@
 #ifndef DOCKITEM_H
 #define DOCKITEM_H
 
+#include <QGraphicsColorizeEffect>
 #include <QGraphicsDropShadowEffect>
 #include <QVBoxLayout>
 #include <widgets/Tooltip.h>
@@ -16,9 +17,15 @@ public:
     DockItem(ItemController &controller, Dock &dock) noexcept;
     ~DockItem() noexcept;
 
+    bool mouseIsOver { false };
     void updateDimensions() noexcept;
     void enterEvent(QEnterEvent *) override;
     void leaveEvent(QEvent *) override;
+
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+
+    QGraphicsColorizeEffect *darkFx { new QGraphicsColorizeEffect(this) };
 
     Tooltip *tooltip { new Tooltip(nullptr) };
 

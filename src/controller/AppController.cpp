@@ -61,3 +61,12 @@ const QString &AppController::id() const noexcept
 {
     return m_id;
 }
+
+void AppController::onItemClick(DockItem *item) noexcept
+{
+    if (!toplevelHandles().empty())
+    {
+        toplevelHandles().back()->sendMinimized(false);
+        toplevelHandles().back()->sendActivate();
+    }
+}

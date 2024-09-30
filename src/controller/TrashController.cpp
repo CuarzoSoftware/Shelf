@@ -1,6 +1,8 @@
 #include <controller/TrashController.h>
 #include <controller/Shelf.h>
 #include <QDir>
+#include <QDesktopServices>
+#include <QUrl>
 
 TrashController::TrashController() noexcept :
     ItemController(Trash, "Trash", QPixmap(), false)
@@ -30,4 +32,9 @@ void TrashController::setEmpty(bool empty) noexcept
 
     m_empty = empty;
     setIcon(empty ? m_emptyIcon : m_fullIcon);
+}
+
+void TrashController::onItemClick(DockItem *item) noexcept
+{
+    QDesktopServices::openUrl(QUrl(m_trashDir));
 }

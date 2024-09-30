@@ -53,6 +53,7 @@ public:
     // Wayland
     wl_display *display;
     wl_registry *registry;
+    wl_seat *seat;
     zwlr_foreign_toplevel_manager_v1 *toplevelManager { nullptr };
     std::list<ToplevelHandle*> toplevelHandles;
 };

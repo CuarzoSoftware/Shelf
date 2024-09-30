@@ -100,3 +100,16 @@ ToplevelHandle::~ToplevelHandle() noexcept
     Shelf::get().toplevelHandles.erase(shelfLink);
     zwlr_foreign_toplevel_handle_v1_destroy(handle);
 }
+
+void ToplevelHandle::sendActivate() noexcept
+{
+    zwlr_foreign_toplevel_handle_v1_activate(handle, Shelf::get().seat);
+}
+
+void ToplevelHandle::sendMinimized(bool minimized) noexcept
+{
+    if (minimized)
+        zwlr_foreign_toplevel_handle_v1_set_minimized(handle);
+    else
+        zwlr_foreign_toplevel_handle_v1_unset_minimized(handle);
+}

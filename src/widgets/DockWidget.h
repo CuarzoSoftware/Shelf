@@ -15,6 +15,8 @@ public:
     DockWidget(Dock &dock) noexcept;
     int separatorIndex() const noexcept;
 
+    void resizeEvent(QResizeEvent *) override;
+
     Dock &dock;
     QGraphicsDropShadowEffect *shadowFx { new QGraphicsDropShadowEffect(this) };
     QHBoxLayout *layout { new QHBoxLayout(this) };

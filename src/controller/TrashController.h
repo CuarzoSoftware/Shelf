@@ -12,6 +12,8 @@ public:
     void onTrashDirChange(const QString &) noexcept;
     void setEmpty(bool empty) noexcept;
 
+    void onItemClick(DockItem *item) noexcept override;
+
 private:
     QString m_trashDir;
     QFileSystemWatcher m_watcher;

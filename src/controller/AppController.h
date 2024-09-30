@@ -16,6 +16,9 @@ public:
     void removeToplevelHandle(ToplevelHandle *handle) noexcept;
     const std::list<ToplevelHandle*> &toplevelHandles() const noexcept;
     const QString &id() const noexcept;
+
+    void onItemClick(DockItem *item) noexcept override;
+
 private:
     std::list<AppController*>::iterator shelfLink;
     std::list<ToplevelHandle*> m_toplevelHandles;
