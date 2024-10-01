@@ -10,6 +10,7 @@
 
 #include <controller/Shelf.h>
 #include <controller/ItemController.h>
+#include <controller/AppController.h>
 #include <widgets/Dock.h>
 #include <widgets/DockWidget.h>
 #include <widgets/DockItem.h>
@@ -73,6 +74,10 @@ Dock::Dock(QScreen *screen) noexcept : QWidget()
     layout->addStretch(1);
     layout->addWidget(dockWidget);
     layout->addStretch(1);
+
+    for (AppController *app : Shelf::get().pinnedApps)
+        new DockItem(*app, *this);
+
     updateDimensions();
     show();
     qInfo() << "Dock added to screen" << screen->name();
@@ -142,15 +147,23 @@ void Dock::resizeEvent(QResizeEvent *event)
 
     if (!isDockVisible)
         setOffsetY(2 - height());
+    else
+        hideAllTooltips();
 }
 
 void Dock::updateDimensions() noexcept
 {
     itemSize.setWidth(maxItemSize());
-    dotSize = itemSize.width() * 0.05;
+    dotSize = itemSize.width() * 0.08;
 
-    if (dotSize < 2)
-        dotSize = 2;
+    double shadowM = itemSize.width() * 0.25;
+    layout->setContentsMargins(shadowM , shadowM , shadowM , 6);
+    setFixedSize(width(), dockSize.height() + layout->contentsMargins().top() + layout->contentsMargins().bottom() + 2);
+    dockWidget->shadowFx->setBlurRadius(shadowM * 3.0);
+    dockWidget->shadowFx->setOffset(0, shadowM * 0.2);
+
+    if (dotSize < 3)
+        dotSize = 3;
 
     if (dotSize > 5)
         dotSize = 5;
@@ -175,9 +188,6 @@ void Dock::updateDimensions() noexcept
     dockWidget->layout->setSpacing(itemsSpacing);
     dockWidget->setFixedHeight(dockSize.height());
     dockWidget->setBorderRadius(dockBorderRadius);
-    setFixedSize(width(), dockSize.height() + layout->contentsMargins().top() + layout->contentsMargins().bottom() + 2);
-
-    //dockElevator->windowHandle()->setMask(QRegion(0, 32, dockElevator->width(), dockElevator->height()));
 
     for (int i = 0; i < dockWidget->layout->count(); i++)
     {
@@ -194,7 +204,7 @@ void Dock::updateDimensions() noexcept
 int Dock::maxItemSize() const noexcept
 {
     double N = dockWidget->layout->count() - 1;
-    int maxWidth = double(width()) / (N + 0.18*N + 3.18);
+    int maxWidth = double(width()) / (N + 0.18*N + 0.18);
     int desired = dockScale * 62;
 
     return qMin(maxWidth, desired);
@@ -210,6 +220,16 @@ void Dock::leaveEvent(QEvent *) noexcept
 {
     isMouseOver = false;
     setDockVisible(false);
+}
+
+void Dock::hideAllTooltips() noexcept
+{
+    for (int i = 0; i < dockWidget->layout->count(); i++)
+    {
+        auto *it = dockWidget->layout->itemAt(i);
+        if (it->widget() && !it->widget()->property("DockItem").isNull())
+            static_cast<DockItem*>(it->widget())->tooltip->move(2 * i, 1000);
+    }
 }
 
 

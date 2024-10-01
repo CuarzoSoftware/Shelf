@@ -18,6 +18,7 @@
 #include <controller/ToplevelHandle.h>
 #include <controller/ItemController.h>
 #include <controller/TrashController.h>
+#include <controller/AppController.h>
 #include <widgets/Dock.h>
 #include <widgets/Tooltip.h>
 
@@ -123,32 +124,32 @@ void Shelf::initCreateUIElements() noexcept
 
 void Shelf::loadConfig() noexcept
 {
-    auto homeLocations = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
-
-    if (homeLocations.empty())
-    {
-        qFatal() << "Could not get HOME dir.";
-        exit(EXIT_FAILURE);
-    }
-
-    homeDir = QDir(homeLocations.front());
-
-    QString val;
-    QFile file;
-    file.setFileName(homeDir.filePath(".config/Cuarzo/Shelf/config.json"));
+    QFile file(QDir::home().filePath(".config/Cuarzo/Shelf/config.json"));
     file.open(QIODevice::ReadOnly | QIODevice::Text);
-    val = file.readAll();
+    QString val = file.readAll();
     file.close();
 
     QJsonDocument conf = QJsonDocument::fromJson(val.toUtf8());
     QJsonArray items = conf["items"].toArray();
 
-
     for (const auto &item : items)
     {
-        KDesktopFile df("Hola");//item.toString());
+        KDesktopFile df(item.toString());
+        QString appId = appIdFromDesktopFile(df.fileName());
+        QString iconName = df.readIcon();
+        QString name = df.readName();
 
-        qInfo() << df.fileName();
+        if (iconName.isNull())
+            iconName = appId;
+
+        if (name.isNull())
+            name = appId;
+
+        qInfo() << "Pinned:" << df.fileName()
+                << "\n- Icon:" << iconName
+                << "\n- Name:" << name
+                << "\n- ID" << appId;
+        new AppController(iconName, name, appId, df.fileName(), true, false);
     }
 }
 
@@ -197,6 +198,31 @@ QString Shelf::desktopFileFromAppId(const QString &appId) noexcept
     }
 
     return QString();
+}
+
+QString Shelf::appIdFromDesktopFile(const QString &desktopFilePath) noexcept
+{
+    QString res { desktopFilePath.trimmed() };
+    QString pre { "/applications/" };
+    const QString suf { ".desktop" };
+
+    int64_t indP { res.lastIndexOf(pre) };
+
+    if (indP < 0)
+    {
+        pre = "/";
+        indP = res.lastIndexOf(pre);
+    }
+
+    if (indP >= 0)
+        res = res.sliced(indP + pre.length());
+
+    const int64_t indS { res.lastIndexOf(suf) };
+
+    if (indS >= 0)
+        res.chop(res.length() - indS);
+
+    return res.replace("/", "-");
 }
 
 QPixmap Shelf::iconFromName(const QString &name, int size) noexcept

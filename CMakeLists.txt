@@ -43,6 +43,7 @@ add_executable(cuarzo-shelf
     src/widgets/RoundWidget.h src/widgets/RoundWidget.cpp
     src/widgets/Caret.h src/widgets/Caret.cpp
     src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
+    src/controller/Constants.h
 )
 
 target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)

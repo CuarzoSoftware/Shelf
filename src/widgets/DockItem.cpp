@@ -6,6 +6,7 @@
 #include <widgets/Dock.h>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QWindow>
 #include <QDebug>
 
 DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
@@ -13,6 +14,19 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
     dock(dock),
     controller(controller)
 {
+    Shelf::makeWidgetTransparent(jumpingIconContainer);
+    jumpingIconContainer->setParent(nullptr);
+    jumpingIconContainer->show();
+    jumpingIconContainer->hide();
+    jumpingIconContainer->windowHandle()->setParent(dock.windowHandle());
+    jumpingIconContainer->windowHandle()->setFlag(Qt::WindowTransparentForInput);
+    jumpingIcon->setScaledContents(true);
+
+    shadowJump->setBlurRadius(4);
+    shadowJump->setOffset(0, 1);
+    shadowJump->setColor(QColor(0, 0, 0, 72));
+    jumpingIcon->setGraphicsEffect(shadowJump);
+
     darkFx->setColor(Qt::black);
     setGraphicsEffect(darkFx);
     darkFx->setEnabled(false);
@@ -23,7 +37,9 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
 
     shadow->setBlurRadius(4);
     shadow->setOffset(0, 1);
-    shadow->setColor(QColor(0, 0, 0, 64));
+    shadow->setColor(QColor(0, 0, 0, 72));
+
+    //if (controller.type() == ItemController::Trash)
     icon->setGraphicsEffect(shadow);
 
     icon->setScaledContents(true);
@@ -32,7 +48,10 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
 
     dot->setPixmap(Shelf::get().dot);
     dot->setScaledContents(true);
-    dot->setVisible(controller.active());
+    dot->setVisible(controller.running());
+    layout->addWidget(iconSubstitute, 0, Qt::AlignCenter);
+    iconSubstitute->hide();
+
     layout->addWidget(icon, 0, Qt::AlignCenter);
     layout->addWidget(dot, 0, Qt::AlignCenter);
     layout->addStretch(1);
@@ -59,6 +78,11 @@ DockItem::~DockItem() noexcept
 
 void DockItem::updateDimensions() noexcept
 {
+    shadow->setBlurRadius(dock.itemSize.height() * 0.05);
+    shadow->setOffset(0, dock.itemSize.height() > 48 ? 1 : 0);
+    shadowJump->setBlurRadius(shadow->blurRadius());
+    shadowJump->setOffset(shadow->offset());
+
     setFixedSize(dock.itemSize);
     dot->setFixedSize(dock.dotSize, dock.dotSize);
     layout->setContentsMargins(0, 0, 0, dock.dotMarginBottom);
@@ -77,6 +101,10 @@ void DockItem::updateDimensions() noexcept
         icon->setFixedHeight(width());
         icon->setFixedWidth((controller.icon().width() * width())/controller.icon().height());
     }
+
+    iconSubstitute->setFixedSize(icon->size());
+    jumpingIcon->setFixedSize(icon->size());
+    jumpingIconContainer->setFixedSize(icon->size() + QSize(32, 32));
 }
 
 void DockItem::enterEvent(QEnterEvent *)

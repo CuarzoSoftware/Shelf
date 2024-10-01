@@ -21,6 +21,7 @@ Tooltip::Tooltip(QWidget *parent) noexcept : QWidget(parent)
     layout->setAlignment(Qt::AlignCenter);
     label->setStyleSheet(".QLabel{color:#1a1a1a;font-family:Inter}");
     containerLayout->addWidget(label);
+    windowHandle()->setFlag(Qt::WindowTransparentForInput);
 }
 
 void Tooltip::showName(DockItem *item) noexcept

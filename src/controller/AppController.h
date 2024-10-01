@@ -1,6 +1,7 @@
 #ifndef APPCONTROLLER_H
 #define APPCONTROLLER_H
 
+#include <QTimer>
 #include <controller/ItemController.h>
 #include <list>
 
@@ -16,13 +17,14 @@ public:
     void removeToplevelHandle(ToplevelHandle *handle) noexcept;
     const std::list<ToplevelHandle*> &toplevelHandles() const noexcept;
     const QString &id() const noexcept;
-
+    const QString &idName() const noexcept;
     void onItemClick(DockItem *item) noexcept override;
 
 private:
+    QTimer *launchTimeout { new QTimer(this) };
     std::list<AppController*>::iterator shelfLink;
     std::list<ToplevelHandle*> m_toplevelHandles;
-    QString m_id;
+    QString m_id, m_idName;
     QString m_desktopFilePath;
     bool m_pinned;
 };

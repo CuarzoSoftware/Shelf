@@ -33,9 +33,9 @@ public:
 
     static void makeWidgetTransparent(QWidget *widget) noexcept;
     static QString desktopFileFromAppId(const QString &appId) noexcept;
+    static QString appIdFromDesktopFile(const QString &desktopFilePath) noexcept;
     static QPixmap iconFromName(const QString &name, int size) noexcept;
 
-    QDir homeDir;
     QVector<QDir> appsDirs;
     QVector<Dock*> docks;
 

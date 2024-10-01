@@ -5,7 +5,7 @@
 #include <QUrl>
 
 TrashController::TrashController() noexcept :
-    ItemController(Trash, "Trash", QPixmap(), false)
+    ItemController(Trash, "Trash", QPixmap(), false, "user-trash")
 {
     m_emptyIcon = Shelf::iconFromName("user-trash", 512);
     m_fullIcon = Shelf::iconFromName("user-trash-full", 512);

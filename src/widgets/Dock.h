@@ -35,6 +35,8 @@ public:
     bool isMouseOver { false };
     DockWidget *dockWidget;
 
+    void hideAllTooltips() noexcept;
+
     void setDockVisible(bool visible) noexcept;
     bool isDockVisible { false };
 

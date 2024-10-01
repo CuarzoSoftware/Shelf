@@ -5,14 +5,15 @@
 #include <QLabel>
 #include <QGraphicsDropShadowEffect>
 #include <controller/Shelf.h>
+#include <controller/Constants.h>
 
-DockWidget::DockWidget(Dock &dock) noexcept : RoundWidget(&dock, 0.5, 16, QColor(0,0,0,48), QColor(250,250,250,245)),
+DockWidget::DockWidget(Dock &dock) noexcept : RoundWidget(&dock, 0.5, 16, QColor(0,0,0,48), DOCK_COLOR),
     dock(dock),
     separator(new ItemSeparator(this, dock))
 {
-    shadowFx->setBlurRadius(64);
-    shadowFx->setOffset(0, 8);
-    shadowFx->setColor(QColor(0, 0, 0, 64));
+    shadowFx->setBlurRadius(96);
+    shadowFx->setOffset(0, 10);
+    shadowFx->setColor(QColor(0, 0, 0, 96));
     setGraphicsEffect(shadowFx);
 
     layout->addWidget(separator, 1, Qt::AlignTop);

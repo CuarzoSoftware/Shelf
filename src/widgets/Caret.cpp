@@ -1,6 +1,7 @@
 #include <widgets/Caret.h>
 #include <QPainter>
 #include <QPainterPath>
+#include <controller/Constants.h>
 
 Caret::Caret(QWidget *parent) noexcept : QWidget(parent)
 {
@@ -16,7 +17,7 @@ void Caret::paintEvent(QPaintEvent *)
     pen.setColor(QColor(0, 0, 0, 48));
     pen.setWidthF(0.5);
     painter.setPen(pen);
-    painter.setBrush(QColor(250,250,250,245));
+    painter.setBrush(DOCK_COLOR);
 
     const double yOffset { 1.0 };
 

@@ -30,8 +30,13 @@ public:
     Tooltip *tooltip { new Tooltip(nullptr) };
 
     QVBoxLayout *layout { new QVBoxLayout(this) };
+    QWidget *jumpingIconContainer { new QWidget(this) };
+    QLabel *jumpingIcon = new QLabel(jumpingIconContainer);
+
+    QWidget *iconSubstitute { new QWidget(this) };
     QLabel *icon = new QLabel(this);
     QGraphicsDropShadowEffect *shadow { new QGraphicsDropShadowEffect(icon)};
+    QGraphicsDropShadowEffect *shadowJump { new QGraphicsDropShadowEffect(jumpingIcon)};
     QLabel *dot { new QLabel(this) };
 
     Dock &dock;
