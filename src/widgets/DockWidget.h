@@ -9,18 +9,19 @@
 class Dock;
 class DockElevator;
 
+/* Dock items container */
+
 class DockWidget final : public RoundWidget
 {
 public:
     DockWidget(Dock &dock) noexcept;
     int separatorIndex() const noexcept;
-
     void resizeEvent(QResizeEvent *) override;
 
     Dock &dock;
-    QGraphicsDropShadowEffect *shadowFx { new QGraphicsDropShadowEffect(this) };
-    QHBoxLayout *layout { new QHBoxLayout(this) };
-    ItemSeparator *separator;
+    QHBoxLayout layout { this };
+    QGraphicsDropShadowEffect shadowFx { this };
+    ItemSeparator separator;
 };
 
 #endif // DOCKWIDGET_H

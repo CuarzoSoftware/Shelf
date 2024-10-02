@@ -28,9 +28,9 @@ public:
     const QString &name() const noexcept;
     void setName(const QString &name) noexcept;
 
-    const QString &iconName() const noexcept;
-
-    const QPixmap &icon() const noexcept;
+    const QString &iconName() const noexcept { return m_iconName; }
+    const QPixmap &icon() const noexcept { return m_icon; }
+    const QPixmap &iconDark() const noexcept { return m_iconDark; }
     void setIcon(const QPixmap &icon) noexcept;
 
     void setIconsJumping(bool jumping) noexcept;
@@ -50,9 +50,9 @@ Q_SIGNALS:
     void jumpPhaseChanged();
 
 private:
-    QPropertyAnimation *m_jumpAnim { new QPropertyAnimation(this, "jumpPhase", this) };
+    QPropertyAnimation m_jumpAnim { this, "jumpPhase", this };
     std::list<DockItem*> m_items;
-    QPixmap m_icon;
+    QPixmap m_icon, m_iconDark;
     QString m_name, m_iconName;
     Type m_type;
     bool m_running;

@@ -2,10 +2,9 @@
 #define DOCKITEM_H
 
 #include <QGraphicsColorizeEffect>
-#include <QGraphicsDropShadowEffect>
 #include <QVBoxLayout>
 #include <widgets/Tooltip.h>
-#include <QLabel>
+#include <widgets/Label.h>
 #include <list>
 
 class ItemController;
@@ -17,7 +16,6 @@ public:
     DockItem(ItemController &controller, Dock &dock) noexcept;
     ~DockItem() noexcept;
 
-    bool mouseIsOver { false };
     void updateDimensions() noexcept;
     void enterEvent(QEnterEvent *) override;
     void leaveEvent(QEvent *) override;
@@ -25,19 +23,22 @@ public:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
 
-    QGraphicsColorizeEffect *darkFx { new QGraphicsColorizeEffect(this) };
+    bool mouseIsOver { false };
 
-    Tooltip *tooltip { new Tooltip(nullptr) };
+    Tooltip tooltip { nullptr };
+    QVBoxLayout layout { this };
 
-    QVBoxLayout *layout { new QVBoxLayout(this) };
-    QWidget *jumpingIconContainer { new QWidget(this) };
-    QLabel *jumpingIcon = new QLabel(jumpingIconContainer);
+    /* Ideally, "icon" should be reused and turned into a subsurface when jumping, but the change is racy
+     * and doing so causes 1 frame of the icon disappearing. */
+    Label jumpingIcon { this };
 
-    QWidget *iconSubstitute { new QWidget(this) };
-    QLabel *icon = new QLabel(this);
-    QGraphicsDropShadowEffect *shadow { new QGraphicsDropShadowEffect(icon)};
-    QGraphicsDropShadowEffect *shadowJump { new QGraphicsDropShadowEffect(jumpingIcon)};
-    QLabel *dot { new QLabel(this) };
+    QLabel icon { this };
+    QLabel dot { this };
+
+    QGraphicsColorizeEffect darkFx { this };
+
+    /* Used to fill the dock space while jumping */
+    QWidget iconSubstitute { this };
 
     Dock &dock;
     ItemController &controller;

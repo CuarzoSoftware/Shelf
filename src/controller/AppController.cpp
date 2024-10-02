@@ -1,3 +1,4 @@
+#include <controller/Constants.h>
 #include <controller/ToplevelHandle.h>
 #include <controller/AppController.h>
 #include <controller/Shelf.h>
@@ -32,8 +33,8 @@ AppController::AppController(const QString &iconName, const QString &name, const
     if (icon().isNull())
         setIcon(Shelf::get().defaultAppIcon);
 
-    launchTimeout->setInterval(10000);
-    connect(launchTimeout, &QTimer::timeout, [this](){
+    m_launchTimeout.setInterval(APP_LAUNCH_TIMEOUT_MS);
+    connect(&m_launchTimeout, &QTimer::timeout, [this](){
         setIconsJumping(false);
     });
 }
@@ -111,6 +112,6 @@ void AppController::onItemClick(DockItem *item) noexcept
         QProcess::startDetached("gio", QStringList() << "launch" << m_desktopFilePath);
         setenv("QT_WAYLAND_SHELL_INTEGRATION", env, 1);
         setIconsJumping(true);
-        launchTimeout->start();
+        m_launchTimeout.start();
     }
 }

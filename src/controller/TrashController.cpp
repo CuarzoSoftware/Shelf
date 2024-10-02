@@ -1,3 +1,4 @@
+#include <controller/Constants.h>
 #include <controller/TrashController.h>
 #include <controller/Shelf.h>
 #include <QDir>
@@ -7,8 +8,8 @@
 TrashController::TrashController() noexcept :
     ItemController(Trash, "Trash", QPixmap(), false, "user-trash")
 {
-    m_emptyIcon = Shelf::iconFromName("user-trash", 512);
-    m_fullIcon = Shelf::iconFromName("user-trash-full", 512);
+    m_emptyIcon = Shelf::applyShadow(Shelf::iconFromName("user-trash", ICON_SIZE), ICON_SIZE);
+    m_fullIcon = Shelf::applyShadow(Shelf::iconFromName("user-trash-full", ICON_SIZE), ICON_SIZE);
     setIcon(m_emptyIcon);
     Shelf::get().trash = this;
 

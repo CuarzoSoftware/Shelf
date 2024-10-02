@@ -44,6 +44,7 @@ add_executable(cuarzo-shelf
     src/widgets/Caret.h src/widgets/Caret.cpp
     src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
     src/controller/Constants.h
+    src/widgets/Label.h src/widgets/Label.cpp
 )
 
 target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)

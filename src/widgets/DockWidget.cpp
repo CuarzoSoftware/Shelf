@@ -9,31 +9,33 @@
 
 DockWidget::DockWidget(Dock &dock) noexcept : RoundWidget(&dock, 0.5, 16, QColor(0,0,0,48), DOCK_COLOR),
     dock(dock),
-    separator(new ItemSeparator(this, dock))
+    separator(this, dock)
 {
-    shadowFx->setBlurRadius(96);
-    shadowFx->setOffset(0, 10);
-    shadowFx->setColor(QColor(0, 0, 0, 96));
-    setGraphicsEffect(shadowFx);
+    Shelf::makeWidgetTransparent(&dock);
+    dock.show();dock.hide();
+    shadowFx.setBlurRadius(96);
+    shadowFx.setOffset(0, 10);
+    shadowFx.setColor(QColor(0, 0, 0, 96));
+    setGraphicsEffect(&shadowFx);
 
-    layout->addWidget(separator, 1, Qt::AlignTop);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout.addWidget(&separator, 1, Qt::AlignTop);
+    layout.setContentsMargins(0, 0, 0, 0);
 }
 
 int DockWidget::separatorIndex() const noexcept
 {
-    return layout->indexOf(separator);
+    return layout.indexOf(&separator);
 }
 
 void DockWidget::resizeEvent(QResizeEvent *)
 {
-    for (int i = 0; i < layout->count(); i++)
+    for (int i = 0; i < layout.count(); i++)
     {
-        auto *it = layout->itemAt(i);
+        auto *it = layout.itemAt(i);
         if (it->widget() && !it->widget()->property("DockItem").isNull())
         {
             if (static_cast<DockItem*>(it->widget())->mouseIsOver)
-                static_cast<DockItem*>(it->widget())->tooltip->showName(static_cast<DockItem*>(it->widget()));
+                static_cast<DockItem*>(it->widget())->tooltip.showItemName(static_cast<DockItem*>(it->widget()));
         }
     }
 }

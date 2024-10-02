@@ -2,8 +2,7 @@
 #define DOCK_H
 
 #include <QPropertyAnimation>
-#include <QHBoxLayout>
-#include <QWidget>
+#include <widgets/DockWidget.h>
 
 class DockElevator;
 class DockWidget;
@@ -29,24 +28,15 @@ public:
     void enterEvent(QEnterEvent *event) noexcept override;
     void leaveEvent(QEvent *) noexcept override;
 
-    QHBoxLayout *layout { new QHBoxLayout(this) };
-    QPropertyAnimation *slideUpAnim;
-    QPropertyAnimation *slideDownAnim;
-    bool isMouseOver { false };
-    DockWidget *dockWidget;
-
     void hideAllTooltips() noexcept;
-
     void setDockVisible(bool visible) noexcept;
-    bool isDockVisible { false };
-
     void resizeEvent(QResizeEvent *event) override;
     void updateDimensions() noexcept;
     int maxItemSize() const noexcept;
 
+    bool isDockVisible { false };
 
     // Dimensions
-
     double dockScale { 1.0 };
     QSize itemSize;
     int itemsSpacing;
@@ -57,6 +47,15 @@ public:
     int tooltipDistY;
     QMargins dockMargins;
     QSize dockSize;
+    bool isMouseOver { false };
+    int maxHeight { 96 };
+    int dockAndMargins{ 32 };
+
+    QVBoxLayout layout { this };
+    DockWidget dockWidget { *this };
+
+    QPropertyAnimation slideUpAnim { this, "offsetY", this };
+    QPropertyAnimation slideDownAnim { this, "offsetY", this };
 
 Q_SIGNALS:
     void offsetYChanged();

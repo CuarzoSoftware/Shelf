@@ -14,59 +14,53 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
     dock(dock),
     controller(controller)
 {
-    Shelf::makeWidgetTransparent(jumpingIconContainer);
-    jumpingIconContainer->setParent(nullptr);
-    jumpingIconContainer->show();
-    jumpingIconContainer->hide();
-    jumpingIconContainer->windowHandle()->setParent(dock.windowHandle());
-    jumpingIconContainer->windowHandle()->setFlag(Qt::WindowTransparentForInput);
-    jumpingIcon->setScaledContents(true);
+    Shelf::makeWidgetTransparent(&jumpingIcon);
+    jumpingIcon.setParent(nullptr);
+    jumpingIcon.show();
+    jumpingIcon.hide();
+    jumpingIcon.windowHandle()->setParent(dock.windowHandle());
+    jumpingIcon.windowHandle()->setFlag(Qt::WindowTransparentForInput);
+    jumpingIcon.setScaledContents(true);
+    jumpingIcon.setPixmap(controller.icon());
 
-    shadowJump->setBlurRadius(4);
-    shadowJump->setOffset(0, 1);
-    shadowJump->setColor(QColor(0, 0, 0, 72));
-    jumpingIcon->setGraphicsEffect(shadowJump);
-
-    darkFx->setColor(Qt::black);
-    setGraphicsEffect(darkFx);
-    darkFx->setEnabled(false);
+    darkFx.setEnabled(false);
+    darkFx.setColor(Qt::black);
+    setGraphicsEffect(&darkFx);
 
     setProperty("DockItem", true);
     controller.items().push_back(this);
     controllerLink = std::prev(controller.items().end());
 
-    shadow->setBlurRadius(4);
-    shadow->setOffset(0, 1);
-    shadow->setColor(QColor(0, 0, 0, 72));
+    icon.setScaledContents(true);
+    icon.setPixmap(controller.icon());
+    icon.setFixedSize(36, 36);
 
-    //if (controller.type() == ItemController::Trash)
-    icon->setGraphicsEffect(shadow);
+    dot.setPixmap(Shelf::get().dot);
+    dot.setScaledContents(true);
+    dot.setVisible(controller.running());
+    layout.addWidget(&iconSubstitute, 0, Qt::AlignCenter);
+    iconSubstitute.hide();
 
-    icon->setScaledContents(true);
-    icon->setPixmap(controller.icon());
-    icon->setFixedSize(36, 36);
-
-    dot->setPixmap(Shelf::get().dot);
-    dot->setScaledContents(true);
-    dot->setVisible(controller.running());
-    layout->addWidget(iconSubstitute, 0, Qt::AlignCenter);
-    iconSubstitute->hide();
-
-    layout->addWidget(icon, 0, Qt::AlignCenter);
-    layout->addWidget(dot, 0, Qt::AlignCenter);
-    layout->addStretch(1);
+    layout.addWidget(&icon, 0, Qt::AlignCenter);
+    layout.addWidget(&dot, 0, Qt::AlignCenter);
+    layout.addStretch(1);
 
     switch (controller.type())
     {
     case ItemController::App:
-        dock.dockWidget->layout->insertWidget(
-            dock.dockWidget->separatorIndex(),
+        dock.dockWidget.layout.insertWidget(
+            dock.dockWidget.separatorIndex(),
             this);
         break;
     case ItemController::Trash:
-        dock.dockWidget->layout->addWidget(this);
+        dock.dockWidget.layout.addWidget(this);
         break;
     }
+
+    connect(&jumpingIcon, &Label::visibilityChanged, [this](bool visible) {
+        iconSubstitute.setVisible(visible);
+        icon.setVisible(!visible);
+    });
 
     dock.updateDimensions();
 }
@@ -78,39 +72,33 @@ DockItem::~DockItem() noexcept
 
 void DockItem::updateDimensions() noexcept
 {
-    shadow->setBlurRadius(dock.itemSize.height() * 0.05);
-    shadow->setOffset(0, dock.itemSize.height() > 48 ? 1 : 0);
-    shadowJump->setBlurRadius(shadow->blurRadius());
-    shadowJump->setOffset(shadow->offset());
-
     setFixedSize(dock.itemSize);
-    dot->setFixedSize(dock.dotSize, dock.dotSize);
-    layout->setContentsMargins(0, 0, 0, dock.dotMarginBottom);
-    layout->setSpacing(dock.dotMarginTop);
+    dot.setFixedSize(dock.dotSize, dock.dotSize);
+    layout.setContentsMargins(0, 0, 0, dock.dotMarginBottom);
+    layout.setSpacing(dock.dotMarginTop);
 
     if (controller.icon().width() <= 0 || controller.icon().height() <= 0)
         return;
 
     if (controller.icon().width() > controller.icon().height())
     {
-        icon->setFixedWidth(width());
-        icon->setFixedHeight((controller.icon().height() * width())/controller.icon().width());
+        icon.setFixedWidth(width());
+        icon.setFixedHeight((controller.icon().height() * width())/controller.icon().width());
     }
     else
     {
-        icon->setFixedHeight(width());
-        icon->setFixedWidth((controller.icon().width() * width())/controller.icon().height());
+        icon.setFixedHeight(width());
+        icon.setFixedWidth((controller.icon().width() * width())/controller.icon().height());
     }
 
-    iconSubstitute->setFixedSize(icon->size());
-    jumpingIcon->setFixedSize(icon->size());
-    jumpingIconContainer->setFixedSize(icon->size() + QSize(32, 32));
+    iconSubstitute.setFixedSize(icon.size());
+    jumpingIcon.setFixedSize(icon.size());
 }
 
 void DockItem::enterEvent(QEnterEvent *)
 {
     mouseIsOver = true;
-    tooltip->showName(this);
+    tooltip.showItemName(this);
 }
 
 void DockItem::leaveEvent(QEvent *)
@@ -121,17 +109,7 @@ void DockItem::leaveEvent(QEvent *)
 void DockItem::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
-    {
-        QPixmap dark = controller.icon();
-        QPainter p(&dark);
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 64));
-        p.drawRect(0,0,dark.width(),dark.height());
-        p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-        p.drawPixmap(0, 0, controller.icon());
-        p.end();
-        icon->setPixmap(dark);
-    }
+        icon.setPixmap(controller.iconDark());
 }
 
 void DockItem::mouseReleaseEvent(QMouseEvent *event)
@@ -139,6 +117,6 @@ void DockItem::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton)
     {
         controller.onItemClick(this);
-        icon->setPixmap(controller.icon());
+        icon.setPixmap(controller.icon());
     }
 }

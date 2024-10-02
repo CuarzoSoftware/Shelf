@@ -9,15 +9,16 @@ ItemController::ItemController(Type type, const QString &name, const QPixmap &ic
     m_type(type),
     m_name(name),
     m_iconName(iconName),
-    m_icon(icon),
+    m_icon(Shelf::applyShadow(icon, ICON_SIZE)),
+    m_iconDark(Shelf::darkerIcon(m_icon)),
     m_running(running)
 {
-    m_jumpAnim->setDuration(500);
-    m_jumpAnim->setStartValue(0.0);
-    m_jumpAnim->setEndValue(1.0);
-    m_jumpAnim->setEasingCurve(QEasingCurve(QEasingCurve::OutQuad));
+    m_jumpAnim.setDuration(ICON_JUMP_MS);
+    m_jumpAnim.setStartValue(0.0);
+    m_jumpAnim.setEndValue(1.0);
+    m_jumpAnim.setEasingCurve(QEasingCurve(QEasingCurve::OutQuad));
 
-    connect(m_jumpAnim, &QPropertyAnimation::finished, [this](){
+    connect(&m_jumpAnim, &QPropertyAnimation::finished, [this](){
 
         if (jumpPhase() == 0.0)
         {
@@ -25,34 +26,34 @@ ItemController::ItemController(Type type, const QString &name, const QPixmap &ic
             {
                 for (DockItem *item : m_items)
                 {
-                    item->icon->show();
-                    item->iconSubstitute->hide();
+                    item->icon.show();
+                    item->iconSubstitute.hide();
 
                     if (item->dock.isDockVisible)
-                        item->tooltip->showName(item);
+                        item->tooltip.showItemName(item);
 
                     QTimer::singleShot(1, [item](){
-                        item->jumpingIconContainer->hide();
+                        item->jumpingIcon.hide();
                     });
                 }
 
                 return;
             }
 
-            m_jumpAnim->setDuration(500);
-            m_jumpAnim->setStartValue(0.0);
-            m_jumpAnim->setEndValue(1.0);
-            m_jumpAnim->setEasingCurve(QEasingCurve(QEasingCurve::OutQuad));
+            m_jumpAnim.setDuration(ICON_JUMP_MS);
+            m_jumpAnim.setStartValue(0.0);
+            m_jumpAnim.setEndValue(1.0);
+            m_jumpAnim.setEasingCurve(QEasingCurve(QEasingCurve::OutQuad));
         }
         else
         {
-            m_jumpAnim->setDuration(500);
-            m_jumpAnim->setStartValue(1.0);
-            m_jumpAnim->setEndValue(0.0);
-            m_jumpAnim->setEasingCurve(QEasingCurve(QEasingCurve::InQuad));
+            m_jumpAnim.setDuration(ICON_JUMP_MS);
+            m_jumpAnim.setStartValue(1.0);
+            m_jumpAnim.setEndValue(0.0);
+            m_jumpAnim.setEasingCurve(QEasingCurve(QEasingCurve::InQuad));
         }
 
-        m_jumpAnim->start();
+        m_jumpAnim.start();
 
     });
 
@@ -84,23 +85,18 @@ void ItemController::setName(const QString &name) noexcept
     }
 }
 
-const QString &ItemController::iconName() const noexcept
-{
-    return m_iconName;
-}
 
-const QPixmap &ItemController::icon() const noexcept
-{
-    return m_icon;
-}
+
+
 
 void ItemController::setIcon(const QPixmap &icon) noexcept
 {
     m_icon = icon;
+    m_iconDark = Shelf::darkerIcon(icon);
 
     for (DockItem *item : m_items)
     {
-        item->icon->setPixmap(m_icon);
+        item->icon.setPixmap(m_icon);
         item->updateDimensions();
     }
 }
@@ -116,22 +112,18 @@ void ItemController::setIconsJumping(bool jumping) noexcept
     {
         for (DockItem *item : m_items)
         {
-            item->jumpingIcon->setPixmap(item->controller.icon());
-            item->jumpingIcon->move(16, 16);
-            item->jumpingIcon->show();
-            item->jumpingIconContainer->move(item->iconSubstitute->mapTo(&item->dock, QPoint(-16, -16)));
-            item->jumpingIconContainer->show();
-            item->iconSubstitute->show();
-            item->icon->hide();
+            item->jumpingIcon.move(item->iconSubstitute.mapTo(&item->dock, QPoint()));
+            item->jumpingIcon.show();
+            item->jumpingIcon.update();
 
             if (item->dock.isDockVisible)
-                item->tooltip->showName(item);
+                item->tooltip.showItemName(item);
         }
-        m_jumpAnim->setDuration(500);
-        m_jumpAnim->setStartValue(0.0);
-        m_jumpAnim->setEndValue(1.0);
-        m_jumpAnim->setEasingCurve(QEasingCurve(QEasingCurve::OutQuad));
-        m_jumpAnim->start();
+        m_jumpAnim.setDuration(ICON_JUMP_MS);
+        m_jumpAnim.setStartValue(0.0);
+        m_jumpAnim.setEndValue(1.0);
+        m_jumpAnim.setEasingCurve(QEasingCurve(QEasingCurve::OutQuad));
+        m_jumpAnim.start();
     }
 }
 
@@ -150,14 +142,14 @@ void ItemController::setJumpPhase(double phase) noexcept
 
     for (DockItem *item : m_items)
     {
-        QPoint newPos = item->iconSubstitute->mapTo(&item->dock, QPoint(-16, -16));
-        newPos.setY(newPos.y() - phase * item->dock.itemSize.height() * 0.5);
-        item->jumpingIconContainer->move(newPos);
+        QPoint newPos = item->iconSubstitute.mapTo(&item->dock, QPoint());
+        newPos.setY(newPos.y() - phase * item->dock.itemSize.height() * ICON_JUMP_HEIGHT);
+        item->jumpingIcon.move(newPos);
 
         if (item->mouseIsOver)
         {
-            const QPoint itemPos { item->mapTo(&item->dock, QPoint(0, -phase * item->dock.itemSize.height() * 0.5)) };
-            item->tooltip->move(itemPos.x() + (item->width() - item->tooltip->width())/2, itemPos.y() -item->tooltip->height() - item->dock.tooltipDistY);
+            const QPoint itemPos { item->mapTo(&item->dock, QPoint(0, -phase * item->dock.itemSize.height() * ICON_JUMP_HEIGHT)) };
+            item->tooltip.move(itemPos.x() + (item->width() - item->tooltip.width())/2, itemPos.y() -item->tooltip.height() - item->dock.tooltipDistY);
         }
     }
 }
@@ -180,7 +172,7 @@ void ItemController::setRunning(bool running) noexcept
     m_running = running;
 
     for (DockItem *item : m_items)
-        item->dot->setVisible(running);
+        item->dot.setVisible(running);
 }
 
 ItemController::Type ItemController::type() const noexcept

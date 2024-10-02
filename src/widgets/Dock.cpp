@@ -19,43 +19,41 @@ using namespace LayerShellQt;
 
 Dock::Dock(QScreen *screen) noexcept : QWidget()
 {
-    dockWidget = new DockWidget(*this);
-    Shelf::makeWidgetTransparent(this);
-    show();hide();
     windowHandle()->setScreen(screen);
-
     auto &shell { *LayerShellQt::Window::get(windowHandle()) };
     shell.setExclusiveZone(-1);
     shell.setLayer(Window::LayerOverlay);
     shell.setAnchors(QFlag(Window::AnchorLeft | Window::AnchorRight | Window::AnchorBottom));
     shell.setScreenConfiguration(LayerShellQt::Window::ScreenConfiguration::ScreenFromQWindow);
+    shell.setScope("cuarzo-shelf");
 
-    slideUpAnim = new QPropertyAnimation(this, "offsetY", this);
-    slideDownAnim = new QPropertyAnimation(this, "offsetY", this);
+    slideUpAnim.setDuration(DOCK_TOGGLE_MS);
+    slideDownAnim.setDuration(slideUpAnim.duration());
 
-    slideUpAnim->setDuration(300);
-    slideDownAnim->setDuration(slideUpAnim->duration());
-
-    connect(slideUpAnim, &QPropertyAnimation::finished, [this]()
+    connect(&slideUpAnim, &QPropertyAnimation::finished, [this]()
     {
+        windowHandle()->setMask(QRegion(0, dockWidget.y(), width(), height()));
+
         if (!isDockVisible)
             setDockVisible(false);
         else
         {
             QTimer::singleShot(16, [this](){
-                for (int i = 0; i < dockWidget->layout->count(); i++)
+                for (int i = 0; i < dockWidget.layout.count(); i++)
                 {
-                    auto *it = dockWidget->layout->itemAt(i);
+                    auto *it = dockWidget.layout.itemAt(i);
                     if (it->widget() && !it->widget()->property("DockItem").isNull())
                     {
                         auto *item = static_cast<DockItem*>(it->widget());
-                        item->tooltip->hide();
-                        item->tooltip->label->setText(item->controller.name());
-                        item->tooltip->show();
-                        item->tooltip->windowHandle()->setParent(windowHandle());
-                        item->tooltip->move(2 * i, height() - 10);
-                        auto *caret = item->tooltip->caret;
-                        caret->move(item->tooltip->container->pos() + QPoint((item->tooltip->container->width() - caret->width())/2, item->tooltip->container->size().height() - 2));
+                        item->tooltip.hide();
+                        item->tooltip.label.setText(item->controller.name());
+                        item->tooltip.show();
+                        item->tooltip.windowHandle()->setParent(windowHandle());
+                        item->tooltip.move(2 * i, height() - 10);
+                        auto &caret = item->tooltip.caret;
+                        caret.move(
+                            item->tooltip.container.pos() + QPoint((item->tooltip.container.width() - caret.width())/2,
+                            item->tooltip.container.size().height() - 2));
 
                     }
                 }
@@ -63,23 +61,26 @@ Dock::Dock(QScreen *screen) noexcept : QWidget()
         }
     });
 
-    connect(slideDownAnim, &QPropertyAnimation::finished,[this]()
+    connect(&slideDownAnim, &QPropertyAnimation::finished, [this]()
     {
+        windowHandle()->setMask(QRegion(0, 0, width(), height()));
+        setOffsetY(4 - height());
+
         if (isDockVisible)
             setDockVisible(true);
     });
 
-    Shelf::makeWidgetTransparent(dockWidget);
-    layout->setContentsMargins(32, 32, 32, 6);
-    layout->addStretch(1);
-    layout->addWidget(dockWidget);
-    layout->addStretch(1);
+    layout.setContentsMargins(32, 32, 32, DOCK_MARGIN_BOTTOM);
+    layout.addStretch(1);
+    layout.addWidget(&dockWidget, 0, Qt::AlignHCenter);
 
     for (AppController *app : Shelf::get().pinnedApps)
         new DockItem(*app, *this);
 
-    updateDimensions();
+    new DockItem((AppController&)*Shelf::get().trash, *this);
+
     show();
+    updateDimensions();
     qInfo() << "Dock added to screen" << screen->name();
 }
 
@@ -114,35 +115,38 @@ void Dock::setDockVisible(bool visible) noexcept
 {
     isDockVisible = visible;
 
-    if (slideUpAnim->state() == QAbstractAnimation::Running || slideDownAnim->state() == QAbstractAnimation::Running)
+    if (slideUpAnim.state() == QAbstractAnimation::Running || slideDownAnim.state() == QAbstractAnimation::Running)
         return;
 
     auto &shell { *LayerShellQt::Window::get(windowHandle()) };
 
     if (isDockVisible)
     {
-        slideUpAnim->setStartValue(2 - height());
-        slideUpAnim->setEndValue(-2);
-        slideUpAnim->start();
+        slideUpAnim.setStartValue(4 -dockAndMargins);
+        slideUpAnim.setEndValue(-4);
+        slideUpAnim.start();
     }
     else
     {
-        for (int i = 0; i < dockWidget->layout->count(); i++)
+        for (int i = 0; i < dockWidget.layout.count(); i++)
         {
-            auto *it = dockWidget->layout->itemAt(i);
+            auto *it = dockWidget.layout.itemAt(i);
             if (it->widget() && !it->widget()->property("DockItem").isNull())
-                static_cast<DockItem*>(it->widget())->tooltip->hide();
+                static_cast<DockItem*>(it->widget())->tooltip.hide();
         }
 
-        slideDownAnim->setStartValue(-2);
-        slideDownAnim->setEndValue(2 - height());
-        slideDownAnim->start();
+        slideDownAnim.setStartValue(-4);
+        slideDownAnim.setEndValue(4-dockAndMargins);
+        slideDownAnim.start();
     }
 }
 
 void Dock::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+
+    maxHeight = sqrt(pow(screen()->size().width(), 2.0) + pow(screen()->size().height(), 2.0)) * DOCK_MAX_HEIGHT;
+    setFixedSize(width(), maxHeight);
     updateDimensions();
 
     if (!isDockVisible)
@@ -156,11 +160,11 @@ void Dock::updateDimensions() noexcept
     itemSize.setWidth(maxItemSize());
     dotSize = itemSize.width() * 0.08;
 
-    double shadowM = itemSize.width() * 0.25;
-    layout->setContentsMargins(shadowM , shadowM , shadowM , 6);
-    setFixedSize(width(), dockSize.height() + layout->contentsMargins().top() + layout->contentsMargins().bottom() + 2);
-    dockWidget->shadowFx->setBlurRadius(shadowM * 3.0);
-    dockWidget->shadowFx->setOffset(0, shadowM * 0.2);
+    double shadowM = screen()->devicePixelRatio() * itemSize.width() * 0.125;
+    layout.setContentsMargins(0 , shadowM , shadowM , DOCK_MARGIN_BOTTOM);
+    dockWidget.shadowFx.setBlurRadius(shadowM * 2.0);
+    dockWidget.shadowFx.setOffset(0, shadowM * 0.2);
+    dockAndMargins = itemSize.height() + dockWidget.shadowFx.blurRadius() + layout.contentsMargins().bottom();
 
     if (dotSize < 3)
         dotSize = 3;
@@ -184,30 +188,28 @@ void Dock::updateDimensions() noexcept
     dockMargins.setBottom(0);
     dockSize.setHeight(dockMargins.top() + dockMargins.bottom() + itemSize.height());
 
-    dockWidget->layout->setContentsMargins(dockMargins);
-    dockWidget->layout->setSpacing(itemsSpacing);
-    dockWidget->setFixedHeight(dockSize.height());
-    dockWidget->setBorderRadius(dockBorderRadius);
+    dockWidget.layout.setContentsMargins(dockMargins);
+    dockWidget.layout.setSpacing(itemsSpacing);
+    dockWidget.setFixedHeight(dockSize.height());
+    dockWidget.setBorderRadius(dockBorderRadius);
 
-    for (int i = 0; i < dockWidget->layout->count(); i++)
+    for (int i = 0; i < dockWidget.layout.count(); i++)
     {
-        auto *it = dockWidget->layout->itemAt(i);
+        auto *it = dockWidget.layout.itemAt(i);
         if (it->widget() && !it->widget()->property("DockItem").isNull())
-        {
             static_cast<DockItem*>(it->widget())->updateDimensions();
-        }
     }
 
-    dockWidget->separator->setFixedHeight(dockWidget->height() - 2 * dockMargins.top());
+    dockWidget.separator.setFixedHeight(dockWidget.height() - 2 * dockMargins.top());
 }
 
 int Dock::maxItemSize() const noexcept
 {
-    double N = dockWidget->layout->count() - 1;
-    int maxWidth = double(width()) / (N + 0.18*N + 0.18);
+    double N = dockWidget.layout.count() - 1;
+    int maxWidth = double(screen()->size().width()) / (N + 0.18*N + 1.18);
     int desired = dockScale * 62;
 
-    return qMin(maxWidth, desired);
+    return qMin(qMin(maxWidth, desired), int(maxHeight - (8 + screen()->devicePixelRatio() *  maxHeight * 0.2)));
 }
 
 void Dock::enterEvent(QEnterEvent *event) noexcept
@@ -224,11 +226,11 @@ void Dock::leaveEvent(QEvent *) noexcept
 
 void Dock::hideAllTooltips() noexcept
 {
-    for (int i = 0; i < dockWidget->layout->count(); i++)
+    for (int i = 0; i < dockWidget.layout.count(); i++)
     {
-        auto *it = dockWidget->layout->itemAt(i);
+        auto *it = dockWidget.layout.itemAt(i);
         if (it->widget() && !it->widget()->property("DockItem").isNull())
-            static_cast<DockItem*>(it->widget())->tooltip->move(2 * i, 1000);
+            static_cast<DockItem*>(it->widget())->tooltip.move(2 * i, 1000);
     }
 }
 

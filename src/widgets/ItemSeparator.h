@@ -10,13 +10,14 @@ class ItemSeparator final : public QWidget
 {
 public:
     ItemSeparator(QWidget *parent, Dock &dock) noexcept;
-    QVBoxLayout *layout { new QVBoxLayout(this) };
-    QFrame *line { new QFrame(this) };
     Dock &dock;
 
     bool dragging { false };
     double initCursorX;
     double initDockScale;
+
+    QVBoxLayout layout { this };
+    QFrame line { this };
 
     void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;

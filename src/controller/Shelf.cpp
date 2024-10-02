@@ -89,15 +89,14 @@ Shelf::Shelf(int &argc, char **argv) : QApplication(argc, argv)
         exit(EXIT_FAILURE);
     }
 
-    defaultAppIcon = iconFromName("terminal", 512);
+    defaultAppIcon = applyShadow(iconFromName("terminal", ICON_SIZE), ICON_SIZE);
+
+    new TrashController();
 
     loadConfig();
-
     connect(this, &Shelf::screenAdded, this, &Shelf::onScreenAdded);
     connect(this, &Shelf::screenRemoved, this, &Shelf::onScreenRemoved);
     for (auto *screen : screens()) onScreenAdded(screen);
-
-    new TrashController();
 
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registryListener, this);
@@ -233,4 +232,41 @@ QPixmap Shelf::iconFromName(const QString &name, int size) noexcept
         return QPixmap();
 
     return QPixmap::fromImage(icon.pixmap(size, size).toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied));
+}
+
+QPixmap Shelf::applyShadow(const QPixmap &pixmap, int size) noexcept
+{
+    if (pixmap.isNull())
+        return pixmap;
+
+    static QWidget widget{};
+    widget.setFixedSize(size, size);
+    makeWidgetTransparent(&widget);
+
+    static QLabel label {&widget};
+    label.setScaledContents(true);
+    label.setFixedSize(size - 4, size - 4);
+    label.move(2, 2);
+    label.setPixmap(pixmap);
+
+    static QGraphicsDropShadowEffect shadowFx {&label};
+    shadowFx.setBlurRadius(2);
+    shadowFx.setColor(QColor(0, 0, 0, 200));
+    shadowFx.setOffset(0, 1);
+    label.setGraphicsEffect(&shadowFx);
+
+    return widget.grab();
+}
+
+QPixmap Shelf::darkerIcon(const QPixmap &pixmap) noexcept
+{
+    QPixmap dark { pixmap };
+    QPainter p(&dark);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0, 0, 0, 64));
+    p.drawRect(0,0,dark.width(),dark.height());
+    p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+    p.drawPixmap(0, 0, pixmap);
+    p.end();
+    return dark;
 }

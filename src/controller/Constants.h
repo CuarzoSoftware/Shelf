@@ -1,6 +1,13 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+#define DOCK_MARGIN_BOTTOM 8
+#define DOCK_MAX_HEIGHT 0.075 // % screen diag
+#define DOCK_TOGGLE_MS 250
 #define DOCK_COLOR QColor(245,245,255,250)
+#define ICON_SIZE 128
+#define ICON_JUMP_MS 400
+#define ICON_JUMP_HEIGHT 0.75
+#define APP_LAUNCH_TIMEOUT_MS 5000
 
 #endif // CONSTANTS_H
