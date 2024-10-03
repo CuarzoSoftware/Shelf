@@ -1,6 +1,7 @@
 #ifndef DOCK_H
 #define DOCK_H
 
+#include <QOpenGLWidget>
 #include <QPropertyAnimation>
 #include <widgets/DockWidget.h>
 
@@ -27,6 +28,8 @@ public:
 
     void enterEvent(QEnterEvent *event) noexcept override;
     void leaveEvent(QEvent *) noexcept override;
+
+    void paintEvent(QPaintEvent *event) override;
 
     void hideAllTooltips() noexcept;
     void setDockVisible(bool visible) noexcept;

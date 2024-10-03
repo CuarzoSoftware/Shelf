@@ -8,6 +8,7 @@
 #include <widgets/RoundWidget.h>
 #include <widgets/Caret.h>
 #include <controller/Constants.h>
+#include <QOpenGLWidget>
 
 class DockItem;
 

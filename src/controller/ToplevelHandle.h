@@ -3,8 +3,10 @@
 
 #include <QString>
 #include <list>
+#include <cstdint>
 
 class AppController;
+class ThumbnailController;
 struct zwlr_foreign_toplevel_handle_v1;
 
 class ToplevelHandle
@@ -22,8 +24,10 @@ public:
 
     std::list<ToplevelHandle*>::iterator appControllerLink;
     AppController *appController { nullptr };
-    // ItemController *thumbnailController { nullptr };
+    ThumbnailController *thumbnailController { nullptr };
 
+    uint32_t pendingState {0};
+    uint32_t currentState {0};
 
     void sendActivate() noexcept;
     void sendMinimized(bool minimized) noexcept;

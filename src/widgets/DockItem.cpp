@@ -52,6 +52,11 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
             dock.dockWidget.separatorIndex(),
             this);
         break;
+    case ItemController::Thumbnail:
+        dock.dockWidget.layout.insertWidget(
+            dock.dockWidget.layout.count() - 1,
+            this);
+        break;
     case ItemController::Trash:
         dock.dockWidget.layout.addWidget(this);
         break;
@@ -72,27 +77,27 @@ DockItem::~DockItem() noexcept
 
 void DockItem::updateDimensions() noexcept
 {
-    setFixedSize(dock.itemSize);
+    const bool updates { dock.updatesEnabled() };
+
+    setFixedSize(dock.itemSize.width() * controller.itemScale(), dock.itemSize.height());
     dot.setFixedSize(dock.dotSize, dock.dotSize);
     layout.setContentsMargins(0, 0, 0, dock.dotMarginBottom);
     layout.setSpacing(dock.dotMarginTop);
+    icon.setFixedSize(width(), width());
+    iconSubstitute.setFixedSize(icon.size());
+    jumpingIcon.setFixedSize(icon.size());
 
-    if (controller.icon().width() <= 0 || controller.icon().height() <= 0)
-        return;
-
-    if (controller.icon().width() > controller.icon().height())
+    if (controller.itemScale() == 1.0)
     {
-        icon.setFixedWidth(width());
-        icon.setFixedHeight((controller.icon().height() * width())/controller.icon().width());
+        layout.insertWidget(0, &icon, 0, Qt::AlignCenter);
     }
     else
     {
-        icon.setFixedHeight(width());
-        icon.setFixedWidth((controller.icon().width() * width())/controller.icon().height());
+        dock.dockWidget.layout.update();
+        layout.removeWidget(&icon);
+        QSizeF s {(size().toSizeF() - icon.size().toSizeF())/2.f};
+        icon.move(s.width(), s.height());
     }
-
-    iconSubstitute.setFixedSize(icon.size());
-    jumpingIcon.setFixedSize(icon.size());
 }
 
 void DockItem::enterEvent(QEnterEvent *)

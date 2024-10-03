@@ -1,5 +1,5 @@
-#include "controller/AppController.h"
-#include <controller/ItemController.h>
+#include <controller/AppController.h>
+#include <controller/ThumbnailController.h>
 #include <protocols/wlr-foreign-toplevel-management-unstable-v1-client.h>
 #include <controller/ToplevelHandle.h>
 #include <controller/Shelf.h>
@@ -19,7 +19,14 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
     },
     .output_enter   = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle, wl_output *output) {},
     .output_leave   = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle, wl_output *output) {},
-    .state          = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle, wl_array *state) {},
+    .state          = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle, wl_array *state)
+    {
+        auto &handle { *static_cast<ToplevelHandle*>(zwlr_foreign_toplevel_handle_v1_get_user_data(whandle)) };
+        handle.pendingState = 0;
+
+        for (size_t i = 0; i < state->size; i++)
+            handle.pendingState |= 1 << static_cast<zwlr_foreign_toplevel_handle_v1_state*>(state->data)[i];
+    },
     .done           = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle)
     {
         auto &handle { *static_cast<ToplevelHandle*>(zwlr_foreign_toplevel_handle_v1_get_user_data(whandle)) };
@@ -48,6 +55,7 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
                     newController = c;
                     break;
                 }
+
 
                 int64_t i = c->iconName().lastIndexOf(".");
 
@@ -83,6 +91,7 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
                     name = handle.currentAppId;
                 }
 
+
                 for (AppController *c : Shelf::get().pinnedApps)
                 {
                     if (c->iconName() == iconName || iconName == c->id() || iconName.toLower() == c->idName())
@@ -96,14 +105,36 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
                 {
                     newController = new AppController(iconName, name, handle.currentAppId, desktopFilePath, false, true);
                     newController->addToplevelHandle(&handle);
-                    return;
+                    goto skipAppId;
                 }
             }
 
             if (newController)
             {
                 newController->addToplevelHandle(&handle);
-                return;
+                goto skipAppId;
+            }
+        }
+
+        skipAppId:
+
+        handle.currentState = handle.pendingState;
+
+        bool minimized = (handle.currentState & (1 << ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MINIMIZED)) != 0;
+
+        qInfo() << handle.currentAppId << "minimized" << minimized;
+
+        if (minimized)
+        {
+            if (handle.appController && !handle.thumbnailController)
+                handle.thumbnailController = new ThumbnailController(handle);
+        }
+        else
+        {
+            if (handle.thumbnailController)
+            {
+                delete handle.thumbnailController;
+                handle.thumbnailController = nullptr;
             }
         }
     },
@@ -126,6 +157,12 @@ ToplevelHandle::~ToplevelHandle() noexcept
 {
     if (appController)
         appController->removeToplevelHandle(this);
+
+    if (thumbnailController)
+    {
+        delete thumbnailController;
+        thumbnailController = nullptr;
+    }
 
     Shelf::get().toplevelHandles.erase(shelfLink);
     zwlr_foreign_toplevel_handle_v1_destroy(handle);

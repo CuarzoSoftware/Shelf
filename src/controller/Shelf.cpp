@@ -250,8 +250,8 @@ QPixmap Shelf::applyShadow(const QPixmap &pixmap, int size) noexcept
     label.setPixmap(pixmap);
 
     static QGraphicsDropShadowEffect shadowFx {&label};
-    shadowFx.setBlurRadius(2);
-    shadowFx.setColor(QColor(0, 0, 0, 200));
+    shadowFx.setBlurRadius(8);
+    shadowFx.setColor(QColor(0, 0, 0, 72));
     shadowFx.setOffset(0, 1);
     label.setGraphicsEffect(&shadowFx);
 

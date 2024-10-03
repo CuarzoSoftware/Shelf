@@ -31,6 +31,8 @@ void Tooltip::showItemName(DockItem *item) noexcept
         || item->dock.slideUpAnim.state() == QPropertyAnimation::Running)
         return;
 
+    show();
+
     if (label.text() != item->controller.name())
         label.setText(item->controller.name());
 
@@ -64,5 +66,4 @@ void Tooltip::showItemName(DockItem *item) noexcept
 
     caret.move(caretPos);
     move(newPos);
-    show();
 }

@@ -16,6 +16,7 @@ find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Core
     Widgets
     Gui
+    OpenGLWidgets
 )
 
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
@@ -45,6 +46,7 @@ add_executable(cuarzo-shelf
     src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
     src/controller/Constants.h
     src/widgets/Label.h src/widgets/Label.cpp
+    src/controller/ThumbnailController.h src/controller/ThumbnailController.cpp
 )
 
 target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -53,6 +55,7 @@ target_link_libraries(cuarzo-shelf PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::GuiPrivate
+    Qt6::OpenGLWidgets
     KF6::CoreAddons
     KF6::I18n
     KF6::WidgetsAddons

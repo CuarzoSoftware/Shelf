@@ -85,10 +85,6 @@ void ItemController::setName(const QString &name) noexcept
     }
 }
 
-
-
-
-
 void ItemController::setIcon(const QPixmap &icon) noexcept
 {
     m_icon = icon;
@@ -114,6 +110,7 @@ void ItemController::setIconsJumping(bool jumping) noexcept
         {
             item->jumpingIcon.move(item->iconSubstitute.mapTo(&item->dock, QPoint()));
             item->jumpingIcon.show();
+            item->jumpingIcon.raise();
             item->jumpingIcon.update();
 
             if (item->dock.isDockVisible)
@@ -138,7 +135,6 @@ void ItemController::setJumpPhase(double phase) noexcept
         return;
 
     m_jumpPhase = phase;
-    jumpPhaseChanged();
 
     for (DockItem *item : m_items)
     {
@@ -157,6 +153,26 @@ void ItemController::setJumpPhase(double phase) noexcept
 double ItemController::jumpPhase() const noexcept
 {
     return m_jumpPhase;
+}
+
+void ItemController::setItemScale(double scale) noexcept
+{
+    if (m_itemScale == scale)
+        return;
+
+    m_itemScale = scale;
+
+    for (DockItem *item : m_items)
+        item->updateDimensions();
+}
+
+void ItemController::startScaleAnim(double from, double to) noexcept
+{
+    m_scaleAnim.setEasingCurve(QEasingCurve(QEasingCurve::InQuad));
+    m_scaleAnim.setDuration(300);
+    m_scaleAnim.setStartValue(from);
+    m_scaleAnim.setEndValue(to);
+    m_scaleAnim.start();
 }
 
 bool ItemController::running() const noexcept

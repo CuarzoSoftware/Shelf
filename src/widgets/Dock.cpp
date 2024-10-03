@@ -7,6 +7,9 @@
 #include <QDebug>
 #include <QtGlobal>
 #include <QTimer>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
+#include <QSurfaceFormat>
 
 #include <controller/Shelf.h>
 #include <controller/ItemController.h>
@@ -54,6 +57,7 @@ Dock::Dock(QScreen *screen) noexcept : QWidget()
                         caret.move(
                             item->tooltip.container.pos() + QPoint((item->tooltip.container.width() - caret.width())/2,
                             item->tooltip.container.size().height() - 2));
+                        item->tooltip.update();
 
                     }
                 }
@@ -222,6 +226,27 @@ void Dock::leaveEvent(QEvent *) noexcept
 {
     isMouseOver = false;
     setDockVisible(false);
+}
+
+void Dock::paintEvent(QPaintEvent *event)
+{
+    /*
+    QPainter p(this);
+
+    for (int i = 0; i < dockWidget.layout.count(); i++)
+    {
+        auto *it = dockWidget.layout.itemAt(i);
+        if (it->widget() && !it->widget()->property("DockItem").isNull())
+        {
+            DockItem *d {static_cast<DockItem*>(it->widget())};
+            d->layout.update();
+            QPoint pos = d->icon.mapTo(this, QPoint());
+
+            p.drawPixmap(pos.x(), pos.y(), d->icon.width(), d->icon.height(), d->controller.icon());
+        }
+    }
+
+    p.end();*/
 }
 
 void Dock::hideAllTooltips() noexcept
