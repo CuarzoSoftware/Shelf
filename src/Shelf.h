@@ -6,6 +6,9 @@
 #include <EGL/egl.h>
 #include <list>
 
+#include <include/gpu/GrDirectContext.h>
+#include <include/core/SkColorSpace.h>
+
 class Dock;
 
 class Shelf
@@ -32,15 +35,20 @@ public:
     wl_seat *wlSeat { nullptr };
     wl_pointer *wlPointer { nullptr };
     zwlr_layer_shell_v1 *wlLayerShell { nullptr };
+    wl_region *wlEmptyRegion;
 
     EGLDisplay eglDisplay;
     EGLConfig eglConfig;
     EGLContext eglContext;
+
+    sk_sp<GrDirectContext> skContext;
+    sk_sp<SkColorSpace> skColorSpace;
 private:
     Shelf() noexcept = default;
     int init() noexcept;
     bool initWayland() noexcept;
     bool initEGL() noexcept;
+    bool initSkia() noexcept;
     void initDocks() noexcept;
 };
 

@@ -1,3 +1,4 @@
+#include <include/gpu/gl/GrGLAssembleInterface.h>
 #include <QDebug>
 #include <Shelf.h>
 #include <Dock.h>
@@ -62,6 +63,9 @@ int Shelf::init() noexcept
     if (!initEGL())
         return EXIT_FAILURE;
 
+    if (!initSkia())
+        return EXIT_FAILURE;
+
     running = true;
 
     /* Get wl_outputs */
@@ -101,6 +105,8 @@ bool Shelf::initWayland() noexcept
         qFatal() << "Could not get zwlr_layer_shell_v1 version 1.";
         return false;
     }
+
+    wlEmptyRegion = wl_compositor_create_region(wlCompositor);
 
     return true;
 }
@@ -155,6 +161,34 @@ bool Shelf::initEGL() noexcept
         qFatal() << "Failed to create EGL context.";
         return false;
     }
+
+    eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, eglContext);
+    return true;
+}
+
+bool Shelf::initSkia() noexcept
+{
+    auto interface = GrGLMakeAssembledInterface(nullptr, (GrGLGetProc)*[](void *, const char *p) -> void * {
+        return (void *)eglGetProcAddress(p);
+    });
+
+    GrContextOptions options;
+    options.fShaderCacheStrategy = GrContextOptions::ShaderCacheStrategy::kSkSL;
+    options.fAvoidStencilBuffers = true;
+    options.fPreferExternalImagesOverES3 = true;
+    options.fDisableGpuYUVConversion = true;
+    options.fReduceOpsTaskSplitting = GrContextOptions::Enable::kNo;
+    options.fReducedShaderVariations = false;
+
+    skContext = GrDirectContext::MakeGL(interface, options);
+
+    if (!skContext.get())
+    {
+        qFatal() << "Failed to create Skia context.";
+        return false;
+    }
+
+    skColorSpace = SkColorSpace::MakeSRGBLinear();
 
     return true;
 }
