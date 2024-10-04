@@ -15,13 +15,13 @@ class DockWidget final : public RoundWidget
 {
 public:
     DockWidget(Dock &dock) noexcept;
-    int separatorIndex() const noexcept;
+    ~DockWidget();
     void resizeEvent(QResizeEvent *) override;
 
     Dock &dock;
-    QHBoxLayout layout { this };
     QGraphicsDropShadowEffect shadowFx { this };
     ItemSeparator separator;
+    std::list<QWidget*>::iterator separatorDockLink;
 };
 
 #endif // DOCKWIDGET_H

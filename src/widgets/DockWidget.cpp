@@ -18,24 +18,23 @@ DockWidget::DockWidget(Dock &dock) noexcept : RoundWidget(&dock, 0.5, 16, QColor
     shadowFx.setColor(QColor(0, 0, 0, 96));
     setGraphicsEffect(&shadowFx);
 
-    layout.addWidget(&separator, 1, Qt::AlignTop);
-    layout.setContentsMargins(0, 0, 0, 0);
+    dock.items.push_back(&separator);
+    separatorDockLink = std::prev(dock.items.end());
 }
 
-int DockWidget::separatorIndex() const noexcept
+DockWidget::~DockWidget()
 {
-    return layout.indexOf(&separator);
+    dock.items.erase(separatorDockLink);
 }
 
 void DockWidget::resizeEvent(QResizeEvent *)
 {
-    for (int i = 0; i < layout.count(); i++)
+    for (QWidget *it : dock.items)
     {
-        auto *it = layout.itemAt(i);
-        if (it->widget() && !it->widget()->property("DockItem").isNull())
+        if (!it->property("DockItem").isNull())
         {
-            if (static_cast<DockItem*>(it->widget())->mouseIsOver)
-                static_cast<DockItem*>(it->widget())->tooltip.showItemName(static_cast<DockItem*>(it->widget()));
+            if (static_cast<DockItem*>(it)->mouseIsOver)
+                static_cast<DockItem*>(it)->tooltip.showItemName(static_cast<DockItem*>(it));
         }
     }
 }

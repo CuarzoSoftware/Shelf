@@ -29,13 +29,9 @@ void ItemSeparator::mousePressEvent(QMouseEvent *event)
         initCursorX = QCursor::pos().x();
         initDockScale = dock.dockScale;
 
-        for (int i = 0; i < dock.dockWidget.layout.count(); i++)
-        {
-            auto *it = dock.dockWidget.layout.itemAt(i);
-
-            if (it->widget() && !it->widget()->property("DockItem").isNull())
-                static_cast<DockItem*>(it->widget())->tooltip.move(0, 1000);
-        }
+        for (QWidget *it : dock.items)
+            if (!it->property("DockItem").isNull())
+                static_cast<DockItem*>(it)->tooltip.move(0, 1000);
     }
 }
 
@@ -55,11 +51,11 @@ void ItemSeparator::mouseMoveEvent(QMouseEvent *event)
         double delta = (double(QCursor::pos().x()) - initCursorX) * 0.005;
         dock.dockScale = initDockScale + delta;
 
-        if (dock.dockScale > 1.5)
-            dock.dockScale = 1.5;
+        if (dock.dockScale > 1.0)
+            dock.dockScale = 1.0;
 
-        if (dock.dockScale < 0.4)
-            dock.dockScale = 0.4;
+        if (dock.dockScale < 0.25)
+            dock.dockScale = 0.25;
 
         dock.updateDimensions();
     }

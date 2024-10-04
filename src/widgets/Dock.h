@@ -35,26 +35,28 @@ public:
     void setDockVisible(bool visible) noexcept;
     void resizeEvent(QResizeEvent *event) override;
     void updateDimensions() noexcept;
-    int maxItemSize() const noexcept;
+    double maxItemSize() noexcept;
+
+    std::list<QWidget*> items;
 
     bool isDockVisible { false };
 
     // Dimensions
-    double dockScale { 1.0 };
-    QSize itemSize;
-    int itemsSpacing;
-    int dockBorderRadius;
-    int dotSize;
-    int dotMarginTop;
-    int dotMarginBottom;
-    int tooltipDistY;
-    QMargins dockMargins;
-    QSize dockSize;
+    double dockScale { 0.75 };
+    double n { 0.0 };
+    QSizeF itemSize;
+    QSizeF dockSize;
+    double itemsSpacing;
+    double dockBorderRadius;
+    double dockMargin;
+    double dotSize;
+    double dotMarginTop;
+    double dotMarginBottom;
+    double tooltipDistY;
     bool isMouseOver { false };
-    int maxHeight { 96 };
-    int dockAndMargins{ 32 };
+    double maxHeight { 96 };
+    double dockAndMargins{ 32 };
 
-    QVBoxLayout layout { this };
     DockWidget dockWidget { *this };
 
     QPropertyAnimation slideUpAnim { this, "offsetY", this };

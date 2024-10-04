@@ -163,13 +163,13 @@ void ItemController::setItemScale(double scale) noexcept
     m_itemScale = scale;
 
     for (DockItem *item : m_items)
-        item->updateDimensions();
+        item->dock.updateDimensions();
 }
 
 void ItemController::startScaleAnim(double from, double to) noexcept
 {
     m_scaleAnim.setEasingCurve(QEasingCurve(QEasingCurve::InQuad));
-    m_scaleAnim.setDuration(300);
+    m_scaleAnim.setDuration(400);
     m_scaleAnim.setStartValue(from);
     m_scaleAnim.setEndValue(to);
     m_scaleAnim.start();

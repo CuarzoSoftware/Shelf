@@ -131,8 +131,12 @@ void Shelf::loadConfig() noexcept
     QJsonDocument conf = QJsonDocument::fromJson(val.toUtf8());
     QJsonArray items = conf["items"].toArray();
 
+    int i = 0;
     for (const auto &item : items)
     {
+        //if (i > 5)
+            //break;
+        i++;
         KDesktopFile df(item.toString());
         QString appId = appIdFromDesktopFile(df.fileName());
         QString iconName = df.readIcon();
@@ -269,4 +273,22 @@ QPixmap Shelf::darkerIcon(const QPixmap &pixmap) noexcept
     p.drawPixmap(0, 0, pixmap);
     p.end();
     return dark;
+}
+
+QPixmap Shelf::createThumbnail(const QPixmap &pixmap) noexcept
+{
+    QPixmap shadow { applyShadow(pixmap, 64) };
+    QPixmap pix(128, 96);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setBrush(QColor(240, 240, 240, 255));
+    QPen pen;
+    pen.setColor(QColor(0, 0, 0, 64));
+    pen.setWidthF(0.5);
+    p.setPen(pen);
+    p.setRenderHint(QPainter::RenderHint::Antialiasing);
+    p.drawRoundedRect(1, 1, pix.width() - 2, pix.height() - 2, 8, 8);
+    p.drawPixmap(16, 48, 32, 32, shadow);
+    p.end();
+    return pix;
 }

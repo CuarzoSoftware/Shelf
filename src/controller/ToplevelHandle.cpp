@@ -24,7 +24,7 @@ static zwlr_foreign_toplevel_handle_v1_listener handleListener
         auto &handle { *static_cast<ToplevelHandle*>(zwlr_foreign_toplevel_handle_v1_get_user_data(whandle)) };
         handle.pendingState = 0;
 
-        for (size_t i = 0; i < state->size; i++)
+        for (size_t i = 0; i < state->size/sizeof(zwlr_foreign_toplevel_handle_v1_state); i++)
             handle.pendingState |= 1 << static_cast<zwlr_foreign_toplevel_handle_v1_state*>(state->data)[i];
     },
     .done           = [](void *data, zwlr_foreign_toplevel_handle_v1 *whandle)

@@ -43,6 +43,7 @@ public:
     Dock &dock;
     ItemController &controller;
     std::list<DockItem*>::iterator controllerLink;
+    std::list<QWidget*>::iterator dockLink;
 };
 
 #endif // DOCKITEM_H

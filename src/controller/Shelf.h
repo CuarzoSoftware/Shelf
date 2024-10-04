@@ -37,6 +37,7 @@ public:
     static QPixmap iconFromName(const QString &name, int size) noexcept;
     static QPixmap applyShadow(const QPixmap &pixmap, int size) noexcept;
     static QPixmap darkerIcon(const QPixmap &pixmap) noexcept;
+    static QPixmap createThumbnail(const QPixmap &pixmap) noexcept;
 
     QVector<QDir> appsDirs;
     QVector<Dock*> docks;

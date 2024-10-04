@@ -45,20 +45,19 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
     layout.addWidget(&dot, 0, Qt::AlignCenter);
     layout.addStretch(1);
 
+    setParent(&dock.dockWidget);
+
     switch (controller.type())
     {
     case ItemController::App:
-        dock.dockWidget.layout.insertWidget(
-            dock.dockWidget.separatorIndex(),
-            this);
+        dockLink = dock.items.insert(dock.dockWidget.separatorDockLink, this);
         break;
     case ItemController::Thumbnail:
-        dock.dockWidget.layout.insertWidget(
-            dock.dockWidget.layout.count() - 1,
-            this);
+        dockLink = dock.items.insert(std::prev(dock.items.end()), this);
         break;
     case ItemController::Trash:
-        dock.dockWidget.layout.addWidget(this);
+        dock.items.push_back(this);
+        dockLink = std::prev(dock.items.end());
         break;
     }
 
@@ -72,13 +71,13 @@ DockItem::DockItem(ItemController &controller, Dock &dock) noexcept :
 
 DockItem::~DockItem() noexcept
 {
+    dock.items.erase(dockLink);
     controller.items().erase(controllerLink);
+    dock.updateDimensions();
 }
 
 void DockItem::updateDimensions() noexcept
 {
-    const bool updates { dock.updatesEnabled() };
-
     setFixedSize(dock.itemSize.width() * controller.itemScale(), dock.itemSize.height());
     dot.setFixedSize(dock.dotSize, dock.dotSize);
     layout.setContentsMargins(0, 0, 0, dock.dotMarginBottom);
@@ -93,10 +92,11 @@ void DockItem::updateDimensions() noexcept
     }
     else
     {
-        dock.dockWidget.layout.update();
         layout.removeWidget(&icon);
         QSizeF s {(size().toSizeF() - icon.size().toSizeF())/2.f};
         icon.move(s.width(), s.height());
+        show();
+        icon.show();
     }
 }
 

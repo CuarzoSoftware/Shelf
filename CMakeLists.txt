@@ -5,6 +5,7 @@ project(Shelf)
 set(QT_MIN_VERSION "6.6.0")
 set(KF_MIN_VERSION "6.0.0")
 
+find_package(PkgConfig)
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -29,27 +30,42 @@ find_package(KF6Config REQUIRED)
 find_package(LayerShellQt REQUIRED)
 find_package(Wayland REQUIRED)
 
+pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl)
+pkg_check_modules(GLESv2 REQUIRED IMPORTED_TARGET glesv2)
+pkg_check_modules(WAYLAND_EGL REQUIRED wayland-egl)
+
+add_compile_definitions(
+    SK_GL
+    SK_GANESH)
+
 add_executable(cuarzo-shelf
     src/main.cpp
-    src/widgets/Dock.h src/widgets/Dock.cpp
-    src/widgets/DockWidget.h src/widgets/DockWidget.cpp
-    src/controller/Shelf.h src/controller/Shelf.cpp
-    src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h
-    src/widgets/DockItem.h src/widgets/DockItem.cpp
-    src/controller/ItemController.h src/controller/ItemController.cpp
-    src/controller/ToplevelHandle.h src/controller/ToplevelHandle.cpp
-    src/controller/TrashController.h src/controller/TrashController.cpp
-    src/controller/AppController.h src/controller/AppController.cpp
-    src/widgets/Tooltip.h src/widgets/Tooltip.cpp
-    src/widgets/RoundWidget.h src/widgets/RoundWidget.cpp
-    src/widgets/Caret.h src/widgets/Caret.cpp
-    src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
-    src/controller/Constants.h
-    src/widgets/Label.h src/widgets/Label.cpp
-    src/controller/ThumbnailController.h src/controller/ThumbnailController.cpp
+    #src/widgets/Dock.h src/widgets/Dock.cpp
+    #src/widgets/DockWidget.h src/widgets/DockWidget.cpp
+    #src/controller/Shelf.h src/controller/Shelf.cpp
+    #src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h
+    #src/widgets/DockItem.h src/widgets/DockItem.cpp
+    #src/controller/ItemController.h src/controller/ItemController.cpp
+    #src/controller/ToplevelHandle.h src/controller/ToplevelHandle.cpp
+    #src/controller/TrashController.h src/controller/TrashController.cpp
+    #src/controller/AppController.h src/controller/AppController.cpp
+    #src/widgets/Tooltip.h src/widgets/Tooltip.cpp
+    #src/widgets/RoundWidget.h src/widgets/RoundWidget.cpp
+    #src/widgets/Caret.h src/widgets/Caret.cpp
+    #src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
+    #src/controller/Constants.h
+    #src/widgets/Label.h src/widgets/Label.cpp
+    #src/controller/ThumbnailController.h src/controller/ThumbnailController.cpp
+    src/Shelf.h src/Shelf.cpp
+    src/Window.h src/Window.cpp
+    src/Dock.h src/Dock.cpp
+
 )
 
-target_include_directories(cuarzo-shelf PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(cuarzo-shelf PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${WAYLAND_EGL_INCLUDE_DIRS}
+    "third_party/skia/")
 
 target_link_libraries(cuarzo-shelf PRIVATE
     Qt6::Core
@@ -63,6 +79,10 @@ target_link_libraries(cuarzo-shelf PRIVATE
     KF6::ConfigGui
     LayerShellQt::Interface
     Wayland::Client
+    PkgConfig::EGL
+    PkgConfig::GLESv2
+    ${WAYLAND_EGL_LIBRARIES}
+    ${CMAKE_SOURCE_DIR}/third_party/skia/libskia.a
 )
 
 install(TARGETS cuarzo-shelf ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})

@@ -41,11 +41,10 @@ void Tooltip::showItemName(DockItem *item) noexcept
     const QPoint itemPos { item->mapTo(&item->dock, QPoint(0, 0)) };
     windowHandle()->setParent(item->dock.windowHandle());
 
-    for (int i = 0; i < item->dock.dockWidget.layout.count(); i++)
+    for (QWidget *it : item->dock.items)
     {
-        auto *it = item->dock.dockWidget.layout.itemAt(i);
-        if (it->widget() && it->widget() != item && !it->widget()->property("DockItem").isNull())
-            static_cast<DockItem*>(it->widget())->tooltip.move(0, 1000);
+        if (it != item && !it->property("DockItem").isNull())
+            static_cast<DockItem*>(it)->tooltip.move(0, 1000);
     }
 
     QPoint newPos { itemPos.x() + (item->width() - width())/2, itemPos.y() -height() - item->dock.tooltipDistY };
