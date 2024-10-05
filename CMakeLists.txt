@@ -59,6 +59,11 @@ add_executable(cuarzo-shelf
     src/Shelf.h src/Shelf.cpp
     src/Window.h src/Window.cpp
     src/Dock.h src/Dock.cpp
+    src/Utils.h src/Utils.cpp
+    src/Seat.h src/Seat.cpp
+    src/Object.h src/Object.cpp
+    src/Constants.h
+
 
 )
 

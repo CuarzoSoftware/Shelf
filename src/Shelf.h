@@ -10,6 +10,8 @@
 #include <include/core/SkColorSpace.h>
 
 class Dock;
+class Seat;
+class Window;
 
 class Shelf
 {
@@ -25,15 +27,17 @@ public:
         return shelf;
     }
 
+    Window *pointerFocus { nullptr };
+    SkPoint pointerPos { 0, 0 };
+
     std::list<Dock*> docks;
+    std::list<Seat*> seats;
 
     bool running { false };
 
     wl_display *wlDisplay;
     wl_registry *wlRegistry;
     wl_compositor *wlCompositor { nullptr };
-    wl_seat *wlSeat { nullptr };
-    wl_pointer *wlPointer { nullptr };
     zwlr_layer_shell_v1 *wlLayerShell { nullptr };
     wl_region *wlEmptyRegion;
 
@@ -43,6 +47,7 @@ public:
 
     sk_sp<GrDirectContext> skContext;
     sk_sp<SkColorSpace> skColorSpace;
+    sk_sp<SkImage> defaultIcon;
 private:
     Shelf() noexcept = default;
     int init() noexcept;
@@ -50,6 +55,7 @@ private:
     bool initEGL() noexcept;
     bool initSkia() noexcept;
     void initDocks() noexcept;
+    bool initConfig() noexcept;
 };
 
 #endif // SHELF_H

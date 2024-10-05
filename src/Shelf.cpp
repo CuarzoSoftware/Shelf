@@ -2,6 +2,7 @@
 #include <QDebug>
 #include <Shelf.h>
 #include <Dock.h>
+#include <Seat.h>
 
 static const wl_registry_listener wlRegistryListener {
 .global = [](void *data, wl_registry *wlRegistry, uint32_t name, const char *interface, uint32_t version)
@@ -17,6 +18,12 @@ static const wl_registry_listener wlRegistryListener {
     if (!shelf.wlLayerShell && strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0)
     {
         shelf.wlLayerShell = (zwlr_layer_shell_v1*)wl_registry_bind(wlRegistry, name, &zwlr_layer_shell_v1_interface, 1);
+        return;
+    }
+
+    if (strcmp(interface, wl_seat_interface.name) == 0)
+    {
+        new Seat((wl_seat*)wl_registry_bind(wlRegistry, name, &wl_seat_interface, 1), name);
         return;
     }
 
@@ -53,6 +60,15 @@ static const wl_registry_listener wlRegistryListener {
             return;
         }
     }
+
+    for (Seat *seat : shelf.seats)
+    {
+        if (seat->name == name)
+        {
+            delete seat;
+            return;
+        }
+    }
 }};
 
 int Shelf::init() noexcept
@@ -65,6 +81,8 @@ int Shelf::init() noexcept
 
     if (!initSkia())
         return EXIT_FAILURE;
+
+    initConfig();
 
     running = true;
 
@@ -103,6 +121,12 @@ bool Shelf::initWayland() noexcept
     if (!wlLayerShell)
     {
         qFatal() << "Could not get zwlr_layer_shell_v1 version 1.";
+        return false;
+    }
+
+    if (seats.empty())
+    {
+        qFatal() << "Could not get a wl_seat with version 1.";
         return false;
     }
 
@@ -199,4 +223,14 @@ void Shelf::initDocks() noexcept
     wlRegistry = wl_display_get_registry(wlDisplay);
     wl_registry_add_listener(wlRegistry, &wlRegistryListener, this);
     wl_display_roundtrip(wlDisplay);
+}
+
+#include <QIcon>
+#include <Utils.h>
+
+bool Shelf::initConfig() noexcept
+{
+    QIcon::setThemeName("WhiteSur");
+    defaultIcon = Utils::skImageFromPixmap(QIcon::fromTheme("terminal").pixmap(96));
+    return true;
 }

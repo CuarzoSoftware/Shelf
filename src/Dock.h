@@ -6,36 +6,35 @@
 #include <EGL/egl.h>
 #include <include/core/SkSize.h>
 #include <include/core/SkSurface.h>
+#include <Window.h>
 
-struct wl_surface;
 struct wl_output;
-struct wl_callback;
-struct wl_egl_window;
 struct zwlr_layer_surface_v1;
 
-class Dock
+class Dock final : public Window
 {
 public:
     Dock(wl_output *wlOutput, uint32_t name) noexcept;
     ~Dock() noexcept;
 
-    void updateSkSurface() noexcept;
-    void render() noexcept;
+    void paintEvent(SkCanvas *c) noexcept override;
+    void onCallback(bool repainted) noexcept override;
 
-    float scale { 1.f };
-    SkSize size { 1, 200 };
-    SkSize bufferSize { size };
+    void pointerEnterEvent() noexcept override;
+    void pointerLeaveEvent() noexcept override;
 
-    sk_sp<SkSurface> skSurface;
+    void animateVisibility(float from, float to, int64_t ms) noexcept;
 
-    wl_callback *wlCallback { nullptr };
     wl_output *wlOutput;
-    EGLSurface eglSurface { EGL_NO_SURFACE };
-    wl_surface *wlSurface { nullptr };
-    wl_egl_window *wlEGLWindow { nullptr };
     zwlr_layer_surface_v1 *wlLayerSurface { nullptr };
     std::list<Dock*>::iterator shelfLink;
     uint32_t name;
+
+    bool sliding { false };
+    float visibility { 0.f };
+    float fromVisibility, toVisibility;
+    std::chrono::time_point<std::chrono::steady_clock> slideAnimStart;
+    int64_t slideAnimDurationMs;
 };
 
 #endif // DOCK_H
