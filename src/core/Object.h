@@ -1,7 +1,7 @@
 #ifndef OBJECT_H
 #define OBJECT_H
 
-#include <Shelf.h>
+#include <core/Shelf.h>
 
 class Object
 {

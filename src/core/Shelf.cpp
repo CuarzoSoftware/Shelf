@@ -1,8 +1,12 @@
 #include <include/gpu/gl/GrGLAssembleInterface.h>
+#include <QStandardPaths>
+#include <QIcon>
 #include <QDebug>
-#include <Shelf.h>
-#include <Dock.h>
-#include <Seat.h>
+
+#include <core/Utils.h>
+#include <core/Shelf.h>
+#include <windows/Dock.h>
+#include <input/Seat.h>
 
 static const wl_registry_listener wlRegistryListener {
 .global = [](void *data, wl_registry *wlRegistry, uint32_t name, const char *interface, uint32_t version)
@@ -212,7 +216,7 @@ bool Shelf::initSkia() noexcept
         return false;
     }
 
-    skColorSpace = SkColorSpace::MakeSRGBLinear();
+    skColorSpace = SkColorSpace::MakeSRGB();
 
     return true;
 }
@@ -225,12 +229,15 @@ void Shelf::initDocks() noexcept
     wl_display_roundtrip(wlDisplay);
 }
 
-#include <QIcon>
-#include <Utils.h>
-
 bool Shelf::initConfig() noexcept
 {
-    QIcon::setThemeName("WhiteSur");
-    defaultIcon = Utils::skImageFromPixmap(QIcon::fromTheme("terminal").pixmap(96));
+    appsDirs.reserve(16); // XDG_DATA_DIRS/applications
+
+    for (const QString &appDir : QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation))
+        appsDirs.emplace_back(appDir);
+
+    //QIcon::setThemeName("WhiteSur");
+    //QIcon::setFallbackThemeName("Paper");
+    defaultIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("firefox").pixmap(96), 96));
     return true;
 }

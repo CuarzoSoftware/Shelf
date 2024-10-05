@@ -1,8 +1,8 @@
 //#include <LayerShellQt/Shell>
 //#include <controller/Shelf.h>
 
-#include <QGuiApplication>
-#include <Shelf.h>
+#include <QApplication>
+#include <core/Shelf.h>
 
 int main(int argc, char **argv)
 {
@@ -10,6 +10,6 @@ int main(int argc, char **argv)
     Shelf app(argc, argv);
     app.exec(); */
 
-    QGuiApplication app { argc, argv };
+    QApplication app { argc, argv };
     return Shelf::run();
 }

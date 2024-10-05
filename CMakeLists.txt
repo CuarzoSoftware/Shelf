@@ -40,31 +40,7 @@ add_compile_definitions(
 
 add_executable(cuarzo-shelf
     src/main.cpp
-    #src/widgets/Dock.h src/widgets/Dock.cpp
-    #src/widgets/DockWidget.h src/widgets/DockWidget.cpp
-    #src/controller/Shelf.h src/controller/Shelf.cpp
-    #src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h
-    #src/widgets/DockItem.h src/widgets/DockItem.cpp
-    #src/controller/ItemController.h src/controller/ItemController.cpp
-    #src/controller/ToplevelHandle.h src/controller/ToplevelHandle.cpp
-    #src/controller/TrashController.h src/controller/TrashController.cpp
-    #src/controller/AppController.h src/controller/AppController.cpp
-    #src/widgets/Tooltip.h src/widgets/Tooltip.cpp
-    #src/widgets/RoundWidget.h src/widgets/RoundWidget.cpp
-    #src/widgets/Caret.h src/widgets/Caret.cpp
-    #src/widgets/ItemSeparator.h src/widgets/ItemSeparator.cpp
-    #src/controller/Constants.h
-    #src/widgets/Label.h src/widgets/Label.cpp
-    #src/controller/ThumbnailController.h src/controller/ThumbnailController.cpp
-    src/Shelf.h src/Shelf.cpp
-    src/Window.h src/Window.cpp
-    src/Dock.h src/Dock.cpp
-    src/Utils.h src/Utils.cpp
-    src/Seat.h src/Seat.cpp
-    src/Object.h src/Object.cpp
-    src/Constants.h
-
-
+    src/controllers/AppController.cpp src/controllers/AppController.h src/controllers/ItemController.cpp src/controllers/ItemController.h src/core/Constants.h src/core/Object.cpp src/core/Object.h src/core/Shelf.cpp src/core/Shelf.h src/core/Utils.cpp src/core/Utils.h src/input/Seat.cpp src/input/Seat.h src/interfaces/Renderable.h src/items/Item.cpp src/items/Item.h src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1.xml src/protocols/wlr-layer-shell-unstable-v1.c src/protocols/wlr-layer-shell-unstable-v1.h src/protocols/wlr-layer-shell-unstable-v1.xml src/windows/Dock.cpp src/windows/Dock.h src/windows/Window.cpp src/windows/Window.h
 )
 
 target_include_directories(cuarzo-shelf PRIVATE

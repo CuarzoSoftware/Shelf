@@ -1,6 +1,6 @@
-#include <Window.h>
-#include <Shelf.h>
-#include <Seat.h>
+#include <windows/Window.h>
+#include <core/Shelf.h>
+#include <input/Seat.h>
 
 static const wl_pointer_listener wlPointerListener
 {

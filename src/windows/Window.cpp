@@ -1,4 +1,4 @@
-#include <Window.h>
+#include <windows/Window.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <QDebug>
@@ -128,6 +128,13 @@ void Window::commit() noexcept
 void Window::resize(const SkSize &size) noexcept
 {
     m_size = size;
+
+    const int newW = m_size.width() * m_scale;
+    const int newH = m_size.height() * m_scale;
+
+    if (newW == m_bufferSize.width() && newH == m_bufferSize.height())
+        return;
+
     m_bufferSize.fWidth = m_size.width() * m_scale;
     m_bufferSize.fHeight = m_size.height() * m_scale;
 
@@ -151,6 +158,11 @@ void Window::update(bool repaint) noexcept
         wl_callback_add_listener(m_wlCallbackAnimate, &wlCallbackListener, this);
         commit();
     }
+}
+
+bool Window::hasPointerFocus() const noexcept
+{
+    return shelf().pointerFocus == this;
 }
 
 void Window::updateSkSurface() noexcept

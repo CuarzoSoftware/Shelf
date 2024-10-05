@@ -1,14 +1,15 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
+#include <interfaces/Renderable.h>
+#include <core/Object.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include <EGL/egl.h>
 #include <include/core/SkSize.h>
 #include <include/core/SkSurface.h>
-#include <Object.h>
 
-class Window : public Object
+class Window : public Object, public Renderable
 {
 public:
 
@@ -29,12 +30,13 @@ public:
 
     void resize(const SkSize &size) noexcept;
     const SkSize &size() const noexcept { return m_size; }
-    const SkSize &bufferSize() const noexcept { return m_bufferSize; }
+    const SkISize &bufferSize() const noexcept { return m_bufferSize; }
     float scale() const noexcept { return m_scale; }
 
     void update(bool repaint = true) noexcept;
 
-    virtual void paintEvent(SkCanvas *c) noexcept = 0;
+    bool hasPointerFocus() const noexcept;
+
     virtual void scaleChanged() noexcept { update(); }
     virtual void onCallback(bool repainted) noexcept {}
     virtual void pointerEnterEvent() noexcept {}
@@ -54,7 +56,7 @@ private:
     void updateSkSurface() noexcept;
     void emitPaintEvent() noexcept;
     SkSize m_size;
-    SkSize m_bufferSize;
+    SkISize m_bufferSize;
     bool m_pendingRepaint { false };
     bool m_mapped { false };
     float m_scale { 1.f };

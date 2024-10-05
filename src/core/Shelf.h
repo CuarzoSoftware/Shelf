@@ -8,6 +8,7 @@
 
 #include <include/gpu/GrDirectContext.h>
 #include <include/core/SkColorSpace.h>
+#include <QDir>
 
 class Dock;
 class Seat;
@@ -48,6 +49,8 @@ public:
     sk_sp<GrDirectContext> skContext;
     sk_sp<SkColorSpace> skColorSpace;
     sk_sp<SkImage> defaultIcon;
+
+    std::vector<QDir> appsDirs;
 private:
     Shelf() noexcept = default;
     int init() noexcept;
