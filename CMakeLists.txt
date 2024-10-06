@@ -41,6 +41,8 @@ add_compile_definitions(
 add_executable(cuarzo-shelf
     src/main.cpp
     src/controllers/AppController.cpp src/controllers/AppController.h src/controllers/ItemController.cpp src/controllers/ItemController.h src/core/Constants.h src/core/Object.cpp src/core/Object.h src/core/Shelf.cpp src/core/Shelf.h src/core/Utils.cpp src/core/Utils.h src/input/Seat.cpp src/input/Seat.h src/interfaces/Renderable.h src/items/Item.cpp src/items/Item.h src/protocols/wlr-foreign-toplevel-management-unstable-v1-client.h src/protocols/wlr-foreign-toplevel-management-unstable-v1.c src/protocols/wlr-foreign-toplevel-management-unstable-v1.xml src/protocols/wlr-layer-shell-unstable-v1.c src/protocols/wlr-layer-shell-unstable-v1.h src/protocols/wlr-layer-shell-unstable-v1.xml src/windows/Dock.cpp src/windows/Dock.h src/windows/Window.cpp src/windows/Window.h
+    src/controllers/SeparatorController.h src/controllers/SeparatorController.cpp
+    src/controllers/TrashController.h src/controllers/TrashController.cpp
 )
 
 target_include_directories(cuarzo-shelf PRIVATE

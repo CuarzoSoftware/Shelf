@@ -1,14 +1,21 @@
 #ifndef APPCONTROLLER_H
 #define APPCONTROLLER_H
 
+#include <include/core/SkImage.h>
+#include <QString>
 #include <controllers/ItemController.h>
 
 class AppController final : public ItemController
 {
 public:
-    AppController() noexcept;
-
+    AppController(bool running, const QString &name, const QString &iconName) noexcept;
     void drawItem(SkCanvas *c, Item &item) noexcept override;
+
+    sk_sp<SkImage> icon;
+    bool running;
+    QString name;
+    QString iconName;
+    QString appId;
 };
 
 #endif // APPCONTROLLER_H

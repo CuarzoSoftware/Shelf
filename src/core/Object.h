@@ -1,15 +1,18 @@
 #ifndef OBJECT_H
 #define OBJECT_H
 
-#include <core/Shelf.h>
+#include <EGL/egl.h>
+
+class Shelf;
+struct wl_compositor;
 
 class Object
 {
 public:
-    Shelf &shelf() const noexcept { return Shelf::get(); }
-    wl_compositor *wlCompositor() const noexcept { return Shelf::get().wlCompositor; }
-    EGLDisplay eglDisplay() const noexcept { return Shelf::get().eglDisplay; }
-    EGLContext eglContext() const noexcept { return Shelf::get().eglContext; }
+    Shelf &shelf() const noexcept;
+    wl_compositor *wlCompositor() const noexcept;
+    EGLDisplay eglDisplay() const noexcept;
+    EGLContext eglContext() const noexcept;
 };
 
 #endif // OBJECT_H

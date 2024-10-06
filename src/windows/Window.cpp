@@ -1,6 +1,7 @@
 #include <windows/Window.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <core/Shelf.h>
 #include <QDebug>
 
 void Window::Listener::preferred_buffer_scale(void *data, wl_surface *wlSurface, int32_t factor)
@@ -137,12 +138,8 @@ void Window::resize(const SkSize &size) noexcept
 
     m_bufferSize.fWidth = m_size.width() * m_scale;
     m_bufferSize.fHeight = m_size.height() * m_scale;
-
-    if (mapped())
-    {
-        wl_egl_window_resize(m_wlEGLWindow, m_bufferSize.fWidth, m_bufferSize.fHeight, 0, 0);
-        updateSkSurface();
-    }
+    m_pendingBufferResize = true;
+    sizeChanged();
 }
 
 void Window::update(bool repaint) noexcept
@@ -198,6 +195,16 @@ void Window::emitPaintEvent() noexcept
 
     m_wlCallbackRepaint = wl_surface_frame(wlSurface());
     wl_callback_add_listener(m_wlCallbackRepaint, &wlCallbackListener, this);
+
+    beforePaintEvent();
+
+    if (m_pendingBufferResize)
+    {
+        m_pendingBufferResize = false;
+        wl_egl_window_resize(m_wlEGLWindow, m_bufferSize.fWidth, m_bufferSize.fHeight, 0, 0);
+        updateSkSurface();
+    }
+
     m_pendingRepaint = false;
     eglMakeCurrent(eglDisplay(), m_eglSurface, m_eglSurface, eglContext());
     eglSwapInterval(eglDisplay(), 0);

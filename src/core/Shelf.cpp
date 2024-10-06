@@ -3,8 +3,11 @@
 #include <QIcon>
 #include <QDebug>
 
+#include <controllers/SeparatorController.h>
+
 #include <core/Utils.h>
 #include <core/Shelf.h>
+#include <core/Constants.h>
 #include <windows/Dock.h>
 #include <input/Seat.h>
 
@@ -221,23 +224,31 @@ bool Shelf::initSkia() noexcept
     return true;
 }
 
+bool Shelf::initConfig() noexcept
+{
+    QIcon::setThemeName("WhiteSur");
+    QIcon::setFallbackThemeName("Paper");
+
+    defaultIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("nemo").pixmap(ICON_SIZE), ICON_SIZE));
+    trashFullIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("user-trash-full").pixmap(ICON_SIZE), ICON_SIZE));
+    trashEmptyIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("user-trash").pixmap(ICON_SIZE), ICON_SIZE));
+
+    separator.reset(new SeparatorController());
+    trash.reset(new TrashController());
+
+    appsDirs.reserve(16); // XDG_DATA_DIRS/applications
+
+    for (const QString &appDir : QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation))
+        appsDirs.emplace_back(appDir);
+
+    return true;
+}
+
+
 void Shelf::initDocks() noexcept
 {
     wl_registry_destroy(wlRegistry);
     wlRegistry = wl_display_get_registry(wlDisplay);
     wl_registry_add_listener(wlRegistry, &wlRegistryListener, this);
     wl_display_roundtrip(wlDisplay);
-}
-
-bool Shelf::initConfig() noexcept
-{
-    appsDirs.reserve(16); // XDG_DATA_DIRS/applications
-
-    for (const QString &appDir : QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation))
-        appsDirs.emplace_back(appDir);
-
-    //QIcon::setThemeName("WhiteSur");
-    //QIcon::setFallbackThemeName("Paper");
-    defaultIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("firefox").pixmap(96), 96));
-    return true;
 }

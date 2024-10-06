@@ -7,6 +7,7 @@
 #include <include/core/SkSize.h>
 #include <include/core/SkSurface.h>
 #include <windows/Window.h>
+#include <chrono>
 
 struct wl_output;
 struct zwlr_layer_surface_v1;
@@ -18,16 +19,23 @@ public:
     Dock(wl_output *wlOutput, uint32_t name) noexcept;
     ~Dock() noexcept;
 
-    void calculateDimensions() noexcept;
+    void createItems() noexcept;
+    void destroyItems() noexcept;
+
+    void updateDimensions() noexcept;
+    void beforePaintEvent() noexcept override;
     void paintEvent(SkCanvas *c) noexcept override;
     void drawContainer(SkCanvas *c) noexcept;
     void drawItems(SkCanvas *c) noexcept;
     void onCallback(bool repainted) noexcept override;
+    void sizeChanged() noexcept override;
     void pointerEnterEvent() noexcept override;
     void pointerLeaveEvent() noexcept override;
     void animateVisibility(float from, float to, int64_t ms) noexcept;
+    void setVisibility(float v) noexcept;
 
-    const std::list<Item*> &items() const noexcept { return m_items; }
+    std::list<Item*> items;
+    Item *separatorItem, *trashItem;
 
     /* Dimensions */
 
@@ -48,15 +56,12 @@ public:
 
     /* Animation */
 
+    int32_t y { 0 };
     bool sliding { false };
     float visibility { 0.f };
     float fromVisibility, toVisibility;
     std::chrono::time_point<std::chrono::steady_clock> slideAnimStart;
     int64_t slideAnimDurationMs;
-
-private:
-    friend class Item;
-    std::list<Item*> m_items;
 };
 
 #endif // DOCK_H

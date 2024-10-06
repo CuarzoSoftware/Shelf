@@ -6,9 +6,15 @@
 #include <EGL/egl.h>
 #include <list>
 
+#include <controllers/AppController.h>
+#include <controllers/SeparatorController.h>
+#include <controllers/TrashController.h>
+
 #include <include/gpu/GrDirectContext.h>
 #include <include/core/SkColorSpace.h>
 #include <QDir>
+
+#include <memory>
 
 class Dock;
 class Seat;
@@ -31,9 +37,6 @@ public:
     Window *pointerFocus { nullptr };
     SkPoint pointerPos { 0, 0 };
 
-    std::list<Dock*> docks;
-    std::list<Seat*> seats;
-
     bool running { false };
 
     wl_display *wlDisplay;
@@ -49,8 +52,17 @@ public:
     sk_sp<GrDirectContext> skContext;
     sk_sp<SkColorSpace> skColorSpace;
     sk_sp<SkImage> defaultIcon;
+    sk_sp<SkImage> trashEmptyIcon;
+    sk_sp<SkImage> trashFullIcon;
 
     std::vector<QDir> appsDirs;
+
+    std::list<Dock*> docks;
+    std::list<Seat*> seats;
+    std::list<AppController*> pinnedApps;
+    std::list<AppController*> unpinnedApps;
+    std::unique_ptr<SeparatorController> separator;
+    std::unique_ptr<TrashController> trash;
 private:
     Shelf() noexcept = default;
     int init() noexcept;

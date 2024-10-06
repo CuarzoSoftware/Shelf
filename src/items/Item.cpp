@@ -1,27 +1,45 @@
 #include <controllers/ItemController.h>
 #include <items/Item.h>
 #include <windows/Dock.h>
+#include <QDebug>
 
 Item::Item(ItemController &controller, Dock &dock) noexcept :
-    m_controller(controller),
-    m_dock(dock)
+    controller(controller),
+    dock(dock)
 {
-    controller.m_items.emplace_back(this);
-    m_controllerLink = std::prev(controller.m_items.end());
+    controller.items.emplace_back(this);
+    controllerLink = std::prev(controller.items.end());
 
-    dock.m_items.emplace_back(this);
-    m_dockLink = std::prev(dock.m_items.end());
+    if (controller.type == ItemController::App)
+    {
+        qInfo() << "New App Item";
+        dockLink = dock.items.insert(dock.separatorItem->dockLink, this);
+    }
 
-    dock.update();
+    else if (controller.type == ItemController::Separator)
+    {
+        qInfo() << "New Separator Item";
+        dock.items.push_back(this);
+        dockLink = std::prev(dock.items.end());
+        dock.separatorItem = this;
+    }
+
+    else if (controller.type == ItemController::Trash)
+    {
+        qInfo() << "New Separator Item";
+        dock.items.push_back(this);
+        dockLink = std::prev(dock.items.end());
+        dock.trashItem = this;
+    }
 }
 
 Item::~Item() noexcept
 {
-    dock().m_items.erase(m_dockLink);
-    controller().m_items.erase(m_controllerLink);
+    dock.items.erase(dockLink);
+    controller.items.erase(controllerLink);
 }
 
 void Item::paintEvent(SkCanvas *c) noexcept
 {
-    controller().drawItem(c, *this);
+    controller.drawItem(c, *this);
 }

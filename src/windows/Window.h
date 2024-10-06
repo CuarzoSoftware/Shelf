@@ -37,7 +37,9 @@ public:
 
     bool hasPointerFocus() const noexcept;
 
+    virtual void beforePaintEvent() noexcept = 0;
     virtual void scaleChanged() noexcept { update(); }
+    virtual void sizeChanged() noexcept {}
     virtual void onCallback(bool repainted) noexcept {}
     virtual void pointerEnterEvent() noexcept {}
     virtual void pointerLeaveEvent() noexcept {}
@@ -57,6 +59,7 @@ private:
     void emitPaintEvent() noexcept;
     SkSize m_size;
     SkISize m_bufferSize;
+    bool m_pendingBufferResize { false };
     bool m_pendingRepaint { false };
     bool m_mapped { false };
     float m_scale { 1.f };

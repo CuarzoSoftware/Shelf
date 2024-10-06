@@ -1,5 +1,6 @@
 #include <include/core/SkCanvas.h>
 #include <include/core/SkMaskFilter.h>
+#include <include/effects/SkGradientShader.h>
 #include <protocols/wlr-layer-shell-unstable-v1.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -27,8 +28,9 @@ static const zwlr_layer_surface_v1_listener wlLayerSurfaceListener
         }
 
         Dock &dock { *static_cast<Dock*>(data) };
+        zwlr_layer_surface_v1_ack_configure(dock.wlLayerSurface, serial);
         dock.resize(SkSize::Make(width, DOCK_SURFACE_HEIGHT));
-        //zwlr_layer_surface_v1_set_margin(dock.wlLayerSurface, 0, 0, (4 - dock.size().fHeight) * (1.f - dock.visibility) , 0);
+        dock.updateDimensions();
         dock.setMapped(true);
     },
 
@@ -43,6 +45,10 @@ Dock::Dock(wl_output *wlOutput, uint32_t name) noexcept :
     wlOutput(wlOutput),
     name(name)
 {
+    qInfo() << "New Dock!";
+
+    createItems();
+
     wl_output_set_user_data(wlOutput, this);
     Shelf::get().docks.emplace_back(this);
     shelfLink = std::prev(Shelf::get().docks.end());
@@ -55,33 +61,40 @@ Dock::Dock(wl_output *wlOutput, uint32_t name) noexcept :
         "cuarzo-shelf");
 
     zwlr_layer_surface_v1_add_listener(wlLayerSurface, &wlLayerSurfaceListener, this);
-
     zwlr_layer_surface_v1_set_anchor(
         wlLayerSurface,
         ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
         ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
         ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
 
-    zwlr_layer_surface_v1_set_size(
-        wlLayerSurface,
-        0, DOCK_SURFACE_HEIGHT);
-
-    zwlr_layer_surface_v1_set_exclusive_zone(
-        wlLayerSurface,
-        -1);
+    zwlr_layer_surface_v1_set_exclusive_zone(wlLayerSurface, -1);
+    zwlr_layer_surface_v1_set_size(wlLayerSurface, size().width(), 1);
 
     // TODO
     //wl_surface_set_input_region(wlSurface(), shelf().wlEmptyRegion);
     commit();
 
-    for (int i = 0; i < 20; i++)
-        new AppController();
+    const char *apps[] =
+    {
+        "nemo",
+        "firefox",
+        "google-chrome",
+        "qtcreator",
+        "spotify",
+        "godot",
+        "gimp",
+        "inkscape",
+        "gedit",
+        "terminal",
+    };
 
-    qInfo() << "New Dock!";
+    for (int i = 0; i < sizeof(apps)/sizeof(*apps); i++)
+        new AppController(false, apps[i], apps[i]);
 }
 
 Dock::~Dock() noexcept
 {
+    destroyItems();
     wl_output_destroy(wlOutput);
     Shelf::get().docks.erase(shelfLink);
 
@@ -94,12 +107,30 @@ Dock::~Dock() noexcept
     qInfo() << "Dock destroyed!";
 }
 
-void Dock::calculateDimensions() noexcept
+void Dock::createItems() noexcept
 {
-    float n { DOCK_PADDING_LEFT + DOCK_PADDING_RIGHT + float(items().size() - 1) * ITEM_SPACING };
+    new Item(*shelf().separator, *this);
+    new Item(*shelf().trash, *this);
 
-    for (Item *item : items())
-        n += item->controller().scale();
+    for (auto *app : shelf().pinnedApps)
+        new Item(*app, *this);
+
+    for (auto *app : shelf().unpinnedApps)
+        new Item(*app, *this);
+}
+
+void Dock::destroyItems() noexcept
+{
+    while (!items.empty())
+        delete items.back();
+}
+
+void Dock::updateDimensions() noexcept
+{
+    float n { DOCK_PADDING_LEFT + DOCK_PADDING_RIGHT + float(items.size() - 1) * ITEM_SPACING };
+
+    for (Item *item : items)
+        n += item->controller.scale;
 
     itemSize = dockScale * std::min(ITEM_MAX_SIZE, (size().width() - DOCK_MARGIN_L - DOCK_MARGIN_R)/n);
 
@@ -116,28 +147,33 @@ void Dock::calculateDimensions() noexcept
 
     const float dockW { itemSize * n };
     const float dockH { paddingT + itemSize + dotMarginT + dotMarginB + dotSize };
-    const float surfaceH { roundf(dockH + shadowRadius - shadowOffsetY + DOCK_MARGIN_T + DOCK_MARGIN_B) };
+    const float surfaceH { roundf(dockH + shadowRadius - shadowOffsetY + DOCK_MARGIN_T + DOCK_MARGIN_B + DOCK_MARGIN_B_EXTRA) };
 
     rect.setXYWH(
         (size().width() - dockW) / 2.f,
-        surfaceH - DOCK_MARGIN_B - dockH,
+        surfaceH - DOCK_MARGIN_B - DOCK_MARGIN_B_EXTRA - dockH,
         dockW,
         dockH);
 
     const float halfSpacing { itemSpacing * 0.5f };
     float itemX { rect.x() + paddingL - halfSpacing};
 
-    for (Item *item : items())
+    for (Item *item : items)
     {
-        item->rect().fTop = rect.fTop;
-        item->rect().fBottom = rect.fBottom;
-        item->rect().fLeft = itemX;
-        item->rect().fRight = itemX + itemSize * item->controller().scale() + itemSpacing;
-        itemX = item->rect().fRight;
+        item->rect.fTop = rect.fTop;
+        item->rect.fBottom = rect.fBottom;
+        item->rect.fLeft = itemX;
+        item->rect.fRight = itemX + itemSize * item->controller.scale + itemSpacing;
+        itemX = item->rect.fRight;
     }
 
-    if (!sliding)
-        resize(SkSize::Make(size().width(), surfaceH));
+    zwlr_layer_surface_v1_set_size(wlLayerSurface, size().width(), surfaceH);
+    resize(SkSize::Make(size().width(), surfaceH));
+}
+
+void Dock::beforePaintEvent() noexcept
+{
+    updateDimensions();
 }
 
 void Dock::paintEvent(SkCanvas *c) noexcept
@@ -146,8 +182,6 @@ void Dock::paintEvent(SkCanvas *c) noexcept
     c->resetMatrix();
     c->scale(scale(), scale());
     c->clear(SK_ColorTRANSPARENT);
-
-    //calculateDimensions();
     drawContainer(c);
     drawItems(c);
     c->flush();
@@ -166,32 +200,104 @@ void Dock::drawContainer(SkCanvas *c) noexcept
     sk_sp<SkMaskFilter> blurFilter = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, shadowRadius / 3.f);
     p.setMaskFilter(blurFilter);
     p.setBlendMode(SkBlendMode::kSrc);
-    p.setColor(SkColorSetARGB(72, 0, 0, 0));
+    p.setColor(SkColorSetARGB(128, 0, 0, 0));
     p.setStyle(SkPaint::kFill_Style);
     p.setStrokeWidth(0.f);
     p.setAntiAlias(false);
     c->drawRoundRect(shadowRect, borderRadius, borderRadius, p);
 
     // Container fill
-    p.setAntiAlias(true);
+
+    SkColor4f colors[] = { SkColor4f::FromColor(SkColorSetARGB(253, 248, 244, 246)), SkColor4f::FromColor(SkColorSetARGB(250, 235, 233, 238)) };
+    float positions[] = { 0.0f, 1.0f };  // Corresponding positions for the colors
+    SkPoint points [] = {SkPoint::Make(rect.left(), rect.top()), SkPoint::Make(rect.left(), rect.bottom())};
+
+    // Create a linear gradient shader
+    sk_sp<SkShader> gradientShader = SkGradientShader::MakeLinear(points, colors, shelf().skColorSpace, positions, 2, SkTileMode::kClamp);
+    p.setShader(gradientShader);
     p.setMaskFilter(nullptr);
-    p.setColor(SkColorSetARGB(250, 250, 250, 250));
+    uint8_t color { 240 };
+    p.setColor(SkColorSetARGB(250, color, color, color));
     p.setStyle(SkPaint::kFill_Style);
-    p.setStrokeWidth(0.f);
+    p.setStroke(false);
     p.setAntiAlias(true);
     c->drawRoundRect(rect, borderRadius, borderRadius, p);
 
     // Container stroke
+    p.setShader(nullptr);
+    p.setAntiAlias(false);
     p.setBlendMode(SkBlendMode::kSrcOver);
-    p.setColor(SkColorSetARGB(36, 0, 0, 0));
+    p.setColor(SkColorSetARGB(18, 0, 0, 0));
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(0.5f);
     c->drawRoundRect(rect, borderRadius, borderRadius, p);
+    p.setAntiAlias(true);
+    p.setColor(SkColorSetARGB(18, 0, 0, 0));
+    p.setStrokeWidth(0.5f);
+    c->drawRoundRect(rect, borderRadius, borderRadius, p);
+
+    return;
+
+    float x = 50;
+    float y = 10;
+    float w = 70;
+    float h = 70;
+    float borderRadius = 10;
+    float caretX = 35;
+    float caretSize = 14;
+    float caretFactorH = 0.8f;
+    float caretFactorY = 0.12f;
+
+    SkPath path;
+
+    // Caret begin
+    path.moveTo(x + caretX - caretSize, y + h);
+    path.cubicTo(
+        x + caretX - caretSize / 2.0f, y + h + caretSize * caretFactorY,
+        x + caretX - caretSize / 4.f, y + h + caretSize * caretFactorH,
+        x + caretX, y + h + caretSize * caretFactorH);
+
+    path.cubicTo(
+        x + caretX + caretSize / 4.f, y + h + caretSize * caretFactorH,
+        x + caretX + caretSize / 2.0f, y + h + caretSize * caretFactorY,
+        x + caretX + caretSize, y + h);
+    // Caret end
+
+    path.lineTo(x + w - borderRadius, y + h); // B2
+    path.quadTo(x + w, y + h, x + w, y + h - borderRadius); // BR
+    path.lineTo(x + w, y + borderRadius); // R
+    path.quadTo(x + w, y, x + w - borderRadius, y); // TR
+    path.lineTo(x + borderRadius, y); // T
+    path.quadTo(x, y, x, y + borderRadius); // TL
+    path.lineTo(x, y + h - borderRadius); // L
+    path.quadTo(x , y + h, x + borderRadius, y + h);
+    path.close();
+
+    blurFilter = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 8 / 3.f);
+    p.setMaskFilter(blurFilter);
+    p.setBlendMode(SkBlendMode::kSrc);
+    p.setColor(SkColorSetARGB(72, 0, 0, 0));
+    p.setStyle(SkPaint::kFill_Style);
+    p.setStrokeWidth(0.f);
+    p.setAntiAlias(false);
+    c->drawPath(path, p);
+
+    p.setMaskFilter(nullptr);
+    p.setColor(SkColorSetARGB(250, 250, 250, 250));
+    p.setStyle(SkPaint::kFill_Style);
+    p.setStroke(false);
+    p.setAntiAlias(true);
+    c->drawPath(path, p);
+
+    p.setBlendMode(SkBlendMode::kSrcOver);
+    p.setColor(SkColorSetARGB(36, 0, 0, 0));
+    p.setStyle(SkPaint::kStroke_Style);
+    c->drawPath(path, p);
 }
 
 void Dock::drawItems(SkCanvas *c) noexcept
 {
-    for (Item *item : items())
+    for (Item *item : items)
         item->paintEvent(c);
 }
 
@@ -199,12 +305,18 @@ void Dock::onCallback(bool repainted) noexcept
 {
     if (repainted)
     {
+        update(false);
+
+        /*
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
 
-        items().back()->controller().setScale(0.1f + 0.9f * (qSin(M_PI * 2.f * ts.tv_nsec/1000000000.f) + 1.f)/2.f);
-        calculateDimensions();
-        update(true);
+        dockScale = 0.1f + 0.9f * (qSin(M_PI * 2.f * ts.tv_nsec/2000000000.f) + 1.f)/2.f;
+
+        //for (Item *item : items())
+        //    item->controller().setScale(0.1f + 0.9f * (qSin(M_PI * 2.f * ts.tv_nsec/1000000000.f) + 1.f)/2.f);
+        updateDimensions();
+        update();*/
     }
     else
     {
@@ -214,9 +326,8 @@ void Dock::onCallback(bool repainted) noexcept
 
             if (diff >= slideAnimDurationMs)
             {
-                visibility = toVisibility;
                 sliding = false;
-                zwlr_layer_surface_v1_set_margin(wlLayerSurface, 0, 0, (4 - size().fHeight) * (1.f - visibility) , 0);
+                setVisibility(toVisibility);
                 commit();
 
                 if (visibility == 1.f && !hasPointerFocus())
@@ -224,12 +335,24 @@ void Dock::onCallback(bool repainted) noexcept
             }
             else
             {
-                visibility = fromVisibility + ((toVisibility - fromVisibility)*diff)/slideAnimDurationMs;
-                zwlr_layer_surface_v1_set_margin(wlLayerSurface, 0, 0, (4 - size().fHeight) * (1.f - visibility) , 0);
+                setVisibility(fromVisibility + ((toVisibility - fromVisibility)*diff)/slideAnimDurationMs);
                 update(false);
             }
         }
+
+        /*
+        static int c { 0 };
+
+        if (c % (60) == 0)
+            new AppController();
+        c++;
+        update(false);*/
     }
+}
+
+void Dock::sizeChanged() noexcept
+{
+    setVisibility(visibility);
 }
 
 void Dock::pointerEnterEvent() noexcept
@@ -247,12 +370,23 @@ void Dock::pointerLeaveEvent() noexcept
 void Dock::animateVisibility(float from, float to, int64_t ms) noexcept
 {
     sliding = true;
-    visibility = from;
     fromVisibility = from;
     toVisibility = to;
     slideAnimDurationMs = ms;
     slideAnimStart = std::chrono::steady_clock::now();
-    zwlr_layer_surface_v1_set_margin(wlLayerSurface, 0, 0, (4 - size().fHeight) * (1.f - visibility) , 0);
+    setVisibility(from);
     update(false);
+}
+
+void Dock::setVisibility(float v) noexcept
+{
+    visibility = v;
+    const int32_t newY = DOCK_MARGIN_T * (1.f - v) - DOCK_MARGIN_B_EXTRA * v - size().height() * (1.f - v);
+
+    if (newY != y)
+    {
+        y = newY;
+        zwlr_layer_surface_v1_set_margin(wlLayerSurface, 0, 0, y , 0);
+    }
 }
 

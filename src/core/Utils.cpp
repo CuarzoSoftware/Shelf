@@ -26,6 +26,7 @@ QPixmap Utils::iconFromName(const QString &name, int size) noexcept
 
 QPixmap Utils::iconApplyShadow(const QPixmap &pixmap, int size) noexcept
 {
+    return pixmap;
     if (pixmap.isNull())
         return pixmap;
 
