@@ -9,9 +9,8 @@
 #include <core/Shelf.h>
 
 AppController::AppController(bool running, const QString &name, const QString &iconName) noexcept :
-    ItemController(App),
+    ItemController(App, name),
     running(running),
-    name(name),
     iconName(iconName)
 {
     qInfo() << "New App Controller";
@@ -55,4 +54,11 @@ void AppController::drawItem(SkCanvas *c, Item &item) noexcept
         item.dock.rect.fBottom - item.dock.dotMarginB - item.dock.dotSize / 2.f,
         item.dock.dotSize / 2.f,
         p);
+}
+
+void AppController::pointerEnterEvent() noexcept
+{
+    Item &item { *shelf().focusedItem };
+    Tooltip &tooltip { shelf().focusedItem->dock.tooltip };
+    tooltip.showItem(&item);
 }

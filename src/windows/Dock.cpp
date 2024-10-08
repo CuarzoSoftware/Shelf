@@ -27,11 +27,17 @@ static const zwlr_layer_surface_v1_listener wlLayerSurfaceListener
             exit(1);
         }
 
+        qInfo() << "Dock size:" << width << height;
+
         Dock &dock { *static_cast<Dock*>(data) };
         zwlr_layer_surface_v1_ack_configure(dock.wlLayerSurface, serial);
-        dock.resize(SkSize::Make(width, DOCK_SURFACE_HEIGHT));
-        dock.updateDimensions();
-        dock.setMapped(true);
+
+        if (!dock.mapped() || dock.size().width() != width || dock.size().height() != height)
+        {
+            dock.resize(SkSize::Make(width, DOCK_MAX_HEIGHT));
+            dock.setMapped(true);
+            dock.update();
+        }
     },
 
     .closed = [](void *data, zwlr_layer_surface_v1 *zwlr_layer_surface_v1)
@@ -68,7 +74,7 @@ Dock::Dock(wl_output *wlOutput, uint32_t name) noexcept :
         ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
 
     zwlr_layer_surface_v1_set_exclusive_zone(wlLayerSurface, -1);
-    zwlr_layer_surface_v1_set_size(wlLayerSurface, size().width(), 1);
+    zwlr_layer_surface_v1_set_size(wlLayerSurface, 0, 1);
 
     // TODO
     //wl_surface_set_input_region(wlSurface(), shelf().wlEmptyRegion);
@@ -77,10 +83,13 @@ Dock::Dock(wl_output *wlOutput, uint32_t name) noexcept :
     const char *apps[] =
     {
         "nemo",
+        "rocket",
         "firefox",
         "google-chrome",
         "qtcreator",
         "spotify",
+        "discord",
+        "brave",
         "godot",
         "gimp",
         "inkscape",
@@ -167,8 +176,11 @@ void Dock::updateDimensions() noexcept
         itemX = item->rect.fRight;
     }
 
-    zwlr_layer_surface_v1_set_size(wlLayerSurface, size().width(), surfaceH);
     resize(SkSize::Make(size().width(), surfaceH));
+    zwlr_layer_surface_v1_set_size(wlLayerSurface, size().width(), surfaceH);
+
+    if (shelf().focusedItem && &shelf().focusedItem->dock == this)
+        tooltip.showItem(shelf().focusedItem);
 }
 
 void Dock::beforePaintEvent() noexcept
@@ -235,64 +247,6 @@ void Dock::drawContainer(SkCanvas *c) noexcept
     p.setColor(SkColorSetARGB(18, 0, 0, 0));
     p.setStrokeWidth(0.5f);
     c->drawRoundRect(rect, borderRadius, borderRadius, p);
-
-    return;
-
-    float x = 50;
-    float y = 10;
-    float w = 70;
-    float h = 70;
-    float borderRadius = 10;
-    float caretX = 35;
-    float caretSize = 14;
-    float caretFactorH = 0.8f;
-    float caretFactorY = 0.12f;
-
-    SkPath path;
-
-    // Caret begin
-    path.moveTo(x + caretX - caretSize, y + h);
-    path.cubicTo(
-        x + caretX - caretSize / 2.0f, y + h + caretSize * caretFactorY,
-        x + caretX - caretSize / 4.f, y + h + caretSize * caretFactorH,
-        x + caretX, y + h + caretSize * caretFactorH);
-
-    path.cubicTo(
-        x + caretX + caretSize / 4.f, y + h + caretSize * caretFactorH,
-        x + caretX + caretSize / 2.0f, y + h + caretSize * caretFactorY,
-        x + caretX + caretSize, y + h);
-    // Caret end
-
-    path.lineTo(x + w - borderRadius, y + h); // B2
-    path.quadTo(x + w, y + h, x + w, y + h - borderRadius); // BR
-    path.lineTo(x + w, y + borderRadius); // R
-    path.quadTo(x + w, y, x + w - borderRadius, y); // TR
-    path.lineTo(x + borderRadius, y); // T
-    path.quadTo(x, y, x, y + borderRadius); // TL
-    path.lineTo(x, y + h - borderRadius); // L
-    path.quadTo(x , y + h, x + borderRadius, y + h);
-    path.close();
-
-    blurFilter = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 8 / 3.f);
-    p.setMaskFilter(blurFilter);
-    p.setBlendMode(SkBlendMode::kSrc);
-    p.setColor(SkColorSetARGB(72, 0, 0, 0));
-    p.setStyle(SkPaint::kFill_Style);
-    p.setStrokeWidth(0.f);
-    p.setAntiAlias(false);
-    c->drawPath(path, p);
-
-    p.setMaskFilter(nullptr);
-    p.setColor(SkColorSetARGB(250, 250, 250, 250));
-    p.setStyle(SkPaint::kFill_Style);
-    p.setStroke(false);
-    p.setAntiAlias(true);
-    c->drawPath(path, p);
-
-    p.setBlendMode(SkBlendMode::kSrcOver);
-    p.setColor(SkColorSetARGB(36, 0, 0, 0));
-    p.setStyle(SkPaint::kStroke_Style);
-    c->drawPath(path, p);
 }
 
 void Dock::drawItems(SkCanvas *c) noexcept
@@ -328,10 +282,19 @@ void Dock::onCallback(bool repainted) noexcept
             {
                 sliding = false;
                 setVisibility(toVisibility);
+
+                if (visibility == 0.f)
+                    tooltip.setMapped(false);
+
                 commit();
 
-                if (visibility == 1.f && !hasPointerFocus())
-                    animateVisibility(1.f, 0.f, DOCK_SLIDE_ANIM_MS);
+                if (visibility == 1.f)
+                {
+                    if (!hasPointerFocus())
+                        animateVisibility(1.f, 0.f, DOCK_SLIDE_ANIM_MS);
+                    else if (shelf().focusedItem && &shelf().focusedItem->dock == this)
+                        tooltip.showItem(shelf().focusedItem);
+                }
             }
             else
             {
@@ -339,14 +302,6 @@ void Dock::onCallback(bool repainted) noexcept
                 update(false);
             }
         }
-
-        /*
-        static int c { 0 };
-
-        if (c % (60) == 0)
-            new AppController();
-        c++;
-        update(false);*/
     }
 }
 
@@ -361,10 +316,59 @@ void Dock::pointerEnterEvent() noexcept
         animateVisibility(0.f, 1.f, DOCK_SLIDE_ANIM_MS);
 }
 
+void Dock::pointerMotionEvent() noexcept
+{
+    Item *newFocusedItem { nullptr };
+
+    SkRect rect;
+
+    for (Item *item : items)
+    {
+        rect = item->rect;
+        rect.fBottom += 1000.f; // Detect it even when under the dock
+
+        if (rect.contains(shelf().pointerPos.x(), shelf().pointerPos.y()))
+        {
+            newFocusedItem = item;
+            break;
+        }
+    }
+
+    if (shelf().focusedItem)
+    {
+        if (shelf().focusedItem == newFocusedItem)
+        {
+            shelf().focusedItem->controller.pointerMotionEvent();
+        }
+        else
+        {
+            shelf().focusedItem->controller.pointerLeaveEvent();
+            shelf().focusedItem = newFocusedItem;
+
+            if (shelf().focusedItem)
+                shelf().focusedItem->controller.pointerEnterEvent();
+        }
+    }
+    else if (newFocusedItem)
+    {
+        shelf().focusedItem = newFocusedItem;
+        shelf().focusedItem->controller.pointerEnterEvent();
+    }
+
+    if (!newFocusedItem)
+    {
+        tooltip.setMapped(false);
+        commit();
+    }
+}
+
 void Dock::pointerLeaveEvent() noexcept
 {
     if (!sliding && visibility != 0.f)
         animateVisibility(1.f, 0.f, DOCK_SLIDE_ANIM_MS);
+
+    tooltip.setMapped(false);
+    commit();
 }
 
 void Dock::animateVisibility(float from, float to, int64_t ms) noexcept

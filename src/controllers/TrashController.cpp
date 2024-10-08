@@ -9,7 +9,7 @@
 #include <core/Shelf.h>
 #include <QDebug>
 
-TrashController::TrashController() noexcept : ItemController(Trash)
+TrashController::TrashController() noexcept : ItemController(Trash, "Trash Bcause Life is Cool and maybe onw deasd asd asd a sd as dasd as d as da sd as d a d as d")
 {
     qInfo() << "New Trash Controller";
 }
@@ -33,4 +33,11 @@ void TrashController::drawItem(SkCanvas *c, Item &item) noexcept
     p.setAntiAlias(false);
     p.setImageFilter(blurFilter);
     c->drawImageRect(shelf().trashFullIcon, rect, linear, &p);
+}
+
+void TrashController::pointerEnterEvent() noexcept
+{
+    Item &item { *shelf().focusedItem };
+    Tooltip &tooltip { shelf().focusedItem->dock.tooltip };
+    tooltip.showItem(&item);
 }

@@ -2,7 +2,7 @@
 #include <core/Shelf.h>
 #include <items/Item.h>
 
-ItemController::ItemController(Type type) noexcept : type(type)
+ItemController::ItemController(Type type, const QString &name) noexcept : type(type), name(name)
 {
     for (Dock *dock : shelf().docks)
         new Item(*this, *dock);

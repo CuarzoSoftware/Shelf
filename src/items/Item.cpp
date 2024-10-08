@@ -1,4 +1,5 @@
 #include <controllers/ItemController.h>
+#include <core/Shelf.h>
 #include <items/Item.h>
 #include <windows/Dock.h>
 #include <QDebug>
@@ -35,6 +36,11 @@ Item::Item(ItemController &controller, Dock &dock) noexcept :
 
 Item::~Item() noexcept
 {
+    if (hasPointerFocus())
+    {
+        shelf().focusedItem = nullptr;
+    }
+
     dock.items.erase(dockLink);
     controller.items.erase(controllerLink);
 }
@@ -42,4 +48,9 @@ Item::~Item() noexcept
 void Item::paintEvent(SkCanvas *c) noexcept
 {
     controller.drawItem(c, *this);
+}
+
+bool Item::hasPointerFocus() const noexcept
+{
+    return shelf().focusedItem == this;
 }

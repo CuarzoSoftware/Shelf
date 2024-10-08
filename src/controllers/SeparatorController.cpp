@@ -6,7 +6,7 @@
 #include <core/Shelf.h>
 
 SeparatorController::SeparatorController() noexcept :
-    ItemController(Separator)
+    ItemController(Separator, "")
 {
     qInfo() << "New Separator Controller";
 
@@ -25,4 +25,10 @@ void SeparatorController::drawItem(SkCanvas *c, Item &item) noexcept
         xMid, item.rect.y() + item.dock.paddingT,
         xMid, item.rect.y() + item.rect.height() - item.dock.paddingT,
         p);
+}
+
+void SeparatorController::pointerEnterEvent() noexcept
+{
+    Tooltip &tooltip { shelf().focusedItem->dock.tooltip };
+    tooltip.showItem(nullptr);
 }

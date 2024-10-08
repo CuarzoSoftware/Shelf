@@ -11,6 +11,8 @@ void Window::Listener::preferred_buffer_scale(void *data, wl_surface *wlSurface,
     window.m_scale = factor;
     window.resize(window.m_size);
     window.scaleChanged();
+
+    qInfo() << "New scale" << factor;
 }
 
 void Window::Listener::wl_callback_done(void *data, wl_callback *wlCallback, uint32_t callback_data)
@@ -26,7 +28,7 @@ void Window::Listener::wl_callback_done(void *data, wl_callback *wlCallback, uin
         if (window.m_pendingRepaint)
             window.emitPaintEvent();
     }
-    else
+    else if (wlCallback == window.m_wlCallbackAnimate)
     {
         window.m_wlCallbackAnimate = nullptr;
         window.onCallback(false);
@@ -54,6 +56,9 @@ Window::Window(Type type) noexcept : m_type(type)
 
 Window::~Window() noexcept
 {
+    if (hasPointerFocus())
+        shelf().focusedWindow = nullptr;
+
     if (m_skSurface.get())
         m_skSurface.reset();
 
@@ -116,6 +121,12 @@ void Window::setMapped(bool mapped) noexcept
     }
     else
     {
+        m_wlCallbackAnimate = nullptr;
+        m_wlCallbackRepaint = nullptr;
+        eglDestroySurface(eglDisplay(), m_eglSurface);
+        m_eglSurface = EGL_NO_SURFACE;
+        wl_egl_window_destroy(m_wlEGLWindow);
+        m_wlEGLWindow = nullptr;
         wl_surface_attach(wlSurface(), NULL, 0, 0);
         commit();
     }
@@ -136,8 +147,8 @@ void Window::resize(const SkSize &size) noexcept
     if (newW == m_bufferSize.width() && newH == m_bufferSize.height())
         return;
 
-    m_bufferSize.fWidth = m_size.width() * m_scale;
-    m_bufferSize.fHeight = m_size.height() * m_scale;
+    m_bufferSize.fWidth = newW;
+    m_bufferSize.fHeight = newH;
     m_pendingBufferResize = true;
     sizeChanged();
 }
@@ -159,7 +170,7 @@ void Window::update(bool repaint) noexcept
 
 bool Window::hasPointerFocus() const noexcept
 {
-    return shelf().pointerFocus == this;
+    return shelf().focusedWindow == this;
 }
 
 void Window::updateSkSurface() noexcept
@@ -211,4 +222,5 @@ void Window::emitPaintEvent() noexcept
     paintEvent(m_skSurface->getCanvas());
     eglSwapBuffers(eglDisplay(), m_eglSurface);
     eglMakeCurrent(eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, eglContext());
+    afterPaintEvent();
 }

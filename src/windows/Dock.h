@@ -7,6 +7,7 @@
 #include <include/core/SkSize.h>
 #include <include/core/SkSurface.h>
 #include <windows/Window.h>
+#include <windows/Tooltip.h>
 #include <chrono>
 
 struct wl_output;
@@ -29,8 +30,11 @@ public:
     void drawItems(SkCanvas *c) noexcept;
     void onCallback(bool repainted) noexcept override;
     void sizeChanged() noexcept override;
+
     void pointerEnterEvent() noexcept override;
+    void pointerMotionEvent() noexcept override;
     void pointerLeaveEvent() noexcept override;
+
     void animateVisibility(float from, float to, int64_t ms) noexcept;
     void setVisibility(float v) noexcept;
 
@@ -62,6 +66,8 @@ public:
     float fromVisibility, toVisibility;
     std::chrono::time_point<std::chrono::steady_clock> slideAnimStart;
     int64_t slideAnimDurationMs;
+
+    Tooltip tooltip { *this };
 };
 
 #endif // DOCK_H

@@ -10,10 +10,10 @@ class AppController final : public ItemController
 public:
     AppController(bool running, const QString &name, const QString &iconName) noexcept;
     void drawItem(SkCanvas *c, Item &item) noexcept override;
+    void pointerEnterEvent() noexcept override;
 
     sk_sp<SkImage> icon;
     bool running;
-    QString name;
     QString iconName;
     QString appId;
 };

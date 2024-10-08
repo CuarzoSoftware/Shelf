@@ -3,6 +3,7 @@
 
 #include <include/core/SkRect.h>
 #include <interfaces/Renderable.h>
+#include <interfaces/PointerEventsListener.h>
 #include <core/Object.h>
 
 class ItemController;
@@ -14,6 +15,7 @@ public:
     Item(ItemController &controller, Dock &dock) noexcept;
     ~Item() noexcept;
     void paintEvent(SkCanvas *c) noexcept override;
+    bool hasPointerFocus() const noexcept;
 
     SkRect rect;
 

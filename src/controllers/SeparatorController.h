@@ -8,6 +8,7 @@ class SeparatorController final : public ItemController
 public:
     SeparatorController() noexcept;
     void drawItem(SkCanvas *c, Item &item) noexcept override;
+    void pointerEnterEvent() noexcept override;
 };
 
 #endif // SEPARATORCONTROLLER_H

@@ -6,23 +6,29 @@ static const wl_pointer_listener wlPointerListener
 {
     .enter = [](void *data, wl_pointer *wl_pointer, uint32_t serial, wl_surface *wlSurface, wl_fixed_t surfaceX, wl_fixed_t surfaceY)
     {
-        Shelf::get().pointerFocus = static_cast<Window*>(wl_surface_get_user_data(wlSurface));
+        Shelf::get().focusedWindow = static_cast<Window*>(wl_surface_get_user_data(wlSurface));
         Shelf::get().pointerPos.fX = wl_fixed_to_double(surfaceX);
         Shelf::get().pointerPos.fY = wl_fixed_to_double(surfaceY);
-        Shelf::get().pointerFocus->pointerEnterEvent();
+        Shelf::get().focusedWindow->pointerEnterEvent();
     },
     .leave = [](void *data, wl_pointer *wl_pointer, uint32_t serial, wl_surface *wlSurface)
     {
         Window *window { static_cast<Window*>(wl_surface_get_user_data(wlSurface)) };
 
-        if (Shelf::get().pointerFocus == window)
-            Shelf::get().pointerFocus = nullptr;
-
-        window->pointerLeaveEvent();
+        if (Shelf::get().focusedWindow == window)
+        {
+            window->pointerLeaveEvent();
+            Shelf::get().focusedWindow = nullptr;
+        }
     },
-    .motion = [](void *data, wl_pointer *wl_pointer, uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y)
+    .motion = [](void *data, wl_pointer *wl_pointer, uint32_t time, wl_fixed_t surfaceX, wl_fixed_t surfaceY)
     {
-
+        if (Shelf::get().focusedWindow)
+        {
+            Shelf::get().pointerPos.fX = wl_fixed_to_double(surfaceX);
+            Shelf::get().pointerPos.fY = wl_fixed_to_double(surfaceY);
+            Shelf::get().focusedWindow->pointerMotionEvent();
+        }
     },
     .button = [](void *data, wl_pointer *wl_pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state)
     {

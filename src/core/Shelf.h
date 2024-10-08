@@ -12,6 +12,10 @@
 
 #include <include/gpu/GrDirectContext.h>
 #include <include/core/SkColorSpace.h>
+#include <include/core/SkTypeface.h>
+#include <include/core/SkFont.h>
+#include <include/core/SkMaskFilter.h>
+
 #include <QDir>
 
 #include <memory>
@@ -19,6 +23,7 @@
 class Dock;
 class Seat;
 class Window;
+class Item;
 
 class Shelf
 {
@@ -34,7 +39,8 @@ public:
         return shelf;
     }
 
-    Window *pointerFocus { nullptr };
+    Window *focusedWindow { nullptr };
+    Item *focusedItem { nullptr };
     SkPoint pointerPos { 0, 0 };
 
     bool running { false };
@@ -42,6 +48,7 @@ public:
     wl_display *wlDisplay;
     wl_registry *wlRegistry;
     wl_compositor *wlCompositor { nullptr };
+    wl_subcompositor *wlSubcompositor { nullptr };
     zwlr_layer_shell_v1 *wlLayerShell { nullptr };
     wl_region *wlEmptyRegion;
 
@@ -54,6 +61,9 @@ public:
     sk_sp<SkImage> defaultIcon;
     sk_sp<SkImage> trashEmptyIcon;
     sk_sp<SkImage> trashFullIcon;
+    sk_sp<SkTypeface> typeface;
+    SkFont tooltipFont;
+    sk_sp<SkMaskFilter> tooltipBlurMaskFilter;
 
     std::vector<QDir> appsDirs;
 

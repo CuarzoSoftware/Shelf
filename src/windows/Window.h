@@ -2,6 +2,7 @@
 #define WINDOW_H
 
 #include <interfaces/Renderable.h>
+#include <interfaces/PointerEventsListener.h>
 #include <core/Object.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
@@ -9,7 +10,7 @@
 #include <include/core/SkSize.h>
 #include <include/core/SkSurface.h>
 
-class Window : public Object, public Renderable
+class Window : public Object, public Renderable, public PointerEventsListener
 {
 public:
 
@@ -38,13 +39,10 @@ public:
     bool hasPointerFocus() const noexcept;
 
     virtual void beforePaintEvent() noexcept = 0;
+    virtual void afterPaintEvent() noexcept {}
     virtual void scaleChanged() noexcept { update(); }
     virtual void sizeChanged() noexcept {}
     virtual void onCallback(bool repainted) noexcept {}
-    virtual void pointerEnterEvent() noexcept {}
-    virtual void pointerLeaveEvent() noexcept {}
-    virtual void pointerMotionEvent() noexcept {}
-    virtual void pointerButtonEvent() noexcept {}
 
     wl_surface *wlSurface() const noexcept { return m_wlSurface; }
 

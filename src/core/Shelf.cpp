@@ -18,7 +18,13 @@ static const wl_registry_listener wlRegistryListener {
 
     if (!shelf.wlCompositor && version >= 6 && strcmp(interface, wl_compositor_interface.name) == 0)
     {
-        shelf.wlCompositor = (wl_compositor*)wl_registry_bind(wlRegistry, name, &wl_compositor_interface, version);
+        shelf.wlCompositor = (wl_compositor*)wl_registry_bind(wlRegistry, name, &wl_compositor_interface, 6);
+        return;
+    }
+
+    if (!shelf.wlSubcompositor && strcmp(interface, wl_subcompositor_interface.name) == 0)
+    {
+        shelf.wlSubcompositor = (wl_subcompositor*)wl_registry_bind(wlRegistry, name, &wl_subcompositor_interface, 1);
         return;
     }
 
@@ -125,6 +131,12 @@ bool Shelf::initWayland() noexcept
         return false;
     }
 
+    if (!wlSubcompositor)
+    {
+        qFatal() << "Could not get wl_subcompositor version 1.";
+        return false;
+    }
+
     if (!wlLayerShell)
     {
         qFatal() << "Could not get zwlr_layer_shell_v1 version 1.";
@@ -220,16 +232,20 @@ bool Shelf::initSkia() noexcept
     }
 
     skColorSpace = SkColorSpace::MakeSRGB();
-
     return true;
 }
 
 bool Shelf::initConfig() noexcept
 {
+    typeface = SkTypeface::MakeFromName(DEFAULT_FONT_FAMILY, SkFontStyle(SkFontStyle::kSemiBold_Weight, SkFontStyle::kSemiBold_Weight, SkFontStyle::kUpright_Slant));
+    tooltipFont.setTypeface(typeface);
+    tooltipFont.setSize(TOOLTIP_FONT_SIZE);
+    tooltipBlurMaskFilter = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, TOOLTIP_BLUR_RADIUS / 3.f);
+
     QIcon::setThemeName("WhiteSur");
     QIcon::setFallbackThemeName("Paper");
 
-    defaultIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("nemo").pixmap(ICON_SIZE), ICON_SIZE));
+    defaultIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("terminal").pixmap(ICON_SIZE), ICON_SIZE));
     trashFullIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("user-trash-full").pixmap(ICON_SIZE), ICON_SIZE));
     trashEmptyIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("user-trash").pixmap(ICON_SIZE), ICON_SIZE));
 
