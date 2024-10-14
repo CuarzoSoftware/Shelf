@@ -13,14 +13,12 @@ AppController::AppController(bool running, const QString &name, const QString &i
     running(running),
     iconName(iconName)
 {
-    qInfo() << "New App Controller";
-
     QPixmap pixmap = Utils::iconFromName(iconName, ICON_SIZE);
 
     if (pixmap.isNull())
         icon = shelf().defaultIcon;
     else
-        icon = Utils::skImageFromPixmap(Utils::iconApplyShadow(pixmap, ICON_SIZE));
+        icon = Utils::multiSizeImageFromPixmap(pixmap);
 
     for (Dock *dock : shelf().docks)
         dock->update();
@@ -37,18 +35,31 @@ void AppController::drawItem(SkCanvas *c, Item &item) noexcept
         item.dock.rect.y() + (iconSpaceH - size) / 2.f,
         size, size) };
 
+    /* Shadow
     sk_sp<SkImageFilter> blurFilter = SkImageFilters::DropShadow(0.f, 1.f,
                                                                  0.5f, 1.f,
                                                                  SkColorSetARGB(64, 0, 0, 0), nullptr);
 
-    SkPaint p;
-    p.setAntiAlias(false);
-    //p.setImageFilter(blurFilter);
-    c->drawImageRect(icon, rect,linear, &p);
+    p.setImageFilter(blurFilter); */
 
-    p.setImageFilter(nullptr);
+    SkPaint p;
     p.setAntiAlias(true);
-    p.setColor(SkColorSetARGB(150, 0, 0, 0));
+
+    if (&item == shelf().draggedItem)
+        p.setColorFilter(shelf().darkenFilter);
+
+
+    c->drawImageRect(icon.pick(item.dock.itemSize), rect, linear, &p);
+    p.setColorFilter(nullptr);
+    p.setImageFilter(nullptr);
+
+    const float dockColorAvg { (shelf().dockGradientColors[1].fR + shelf().dockGradientColors[1].fG + shelf().dockGradientColors[1].fB) / 3.f };
+
+    if (dockColorAvg > 0.5f)
+        p.setColor(SkColorSetARGB(150, 0, 0, 0));
+    else
+        p.setColor(SkColorSetARGB(150, 255, 255, 255));
+
     c->drawCircle(
         item.rect.x() + item.rect.width() / 2.f,
         item.dock.rect.fBottom - item.dock.dotMarginB - item.dock.dotSize / 2.f,
@@ -61,4 +72,9 @@ void AppController::pointerEnterEvent() noexcept
     Item &item { *shelf().focusedItem };
     Tooltip &tooltip { shelf().focusedItem->dock.tooltip };
     tooltip.showItem(&item);
+}
+
+void AppController::pointerButtonEvent() noexcept
+{
+    shelf().focusedItem->dock.update();
 }

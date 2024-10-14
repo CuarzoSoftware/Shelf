@@ -1,15 +1,25 @@
-//#include <LayerShellQt/Shell>
-//#include <controller/Shelf.h>
-
+#include <QSocketNotifier>
 #include <QApplication>
 #include <core/Shelf.h>
 
 int main(int argc, char **argv)
 {
-    /* LayerShellQt::Shell::useLayerShell();
-    Shelf app(argc, argv);
-    app.exec(); */
-
     QApplication app { argc, argv };
-    return Shelf::run();
+
+    const int fd { Shelf::fd() };
+
+    if (fd < 0)
+        return EXIT_FAILURE;
+
+    QSocketNotifier sockRead { fd, QSocketNotifier::Read  };
+
+    QObject::connect(&sockRead, &QSocketNotifier::activated, []() {
+
+        Shelf::dispatch();
+        Shelf::flush();
+    });
+
+    sockRead.setEnabled(true);
+
+    return app.exec();
 }

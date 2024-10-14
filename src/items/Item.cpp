@@ -13,13 +13,11 @@ Item::Item(ItemController &controller, Dock &dock) noexcept :
 
     if (controller.type == ItemController::App)
     {
-        qInfo() << "New App Item";
         dockLink = dock.items.insert(dock.separatorItem->dockLink, this);
     }
 
     else if (controller.type == ItemController::Separator)
     {
-        qInfo() << "New Separator Item";
         dock.items.push_back(this);
         dockLink = std::prev(dock.items.end());
         dock.separatorItem = this;
@@ -27,7 +25,6 @@ Item::Item(ItemController &controller, Dock &dock) noexcept :
 
     else if (controller.type == ItemController::Trash)
     {
-        qInfo() << "New Separator Item";
         dock.items.push_back(this);
         dockLink = std::prev(dock.items.end());
         dock.trashItem = this;
@@ -37,9 +34,10 @@ Item::Item(ItemController &controller, Dock &dock) noexcept :
 Item::~Item() noexcept
 {
     if (hasPointerFocus())
-    {
         shelf().focusedItem = nullptr;
-    }
+
+    if (shelf().draggedItem == this)
+        shelf().draggedItem = nullptr;
 
     dock.items.erase(dockLink);
     controller.items.erase(controllerLink);

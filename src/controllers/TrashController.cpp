@@ -8,10 +8,16 @@
 #include <core/Constants.h>
 #include <core/Shelf.h>
 #include <QDebug>
+#include <QDesktopServices>
+#include <QUrl>
+#include <linux/input-event-codes.h>
 
-TrashController::TrashController() noexcept : ItemController(Trash, "Trash Bcause Life is Cool and maybe onw deasd asd asd a sd as dasd as d as da sd as d a d as d")
+TrashController::TrashController() noexcept : ItemController(Trash, "Trash")
 {
-    qInfo() << "New Trash Controller";
+    trashDir = QDir::home().filePath(".local/share/Trash/files");
+    fsWatcher.addPath(trashDir);
+    QObject::connect(&fsWatcher, &QFileSystemWatcher::directoryChanged, this, &TrashController::onTrashDirChange);
+    onTrashDirChange(trashDir);
 }
 
 void TrashController::drawItem(SkCanvas *c, Item &item) noexcept
@@ -32,7 +38,13 @@ void TrashController::drawItem(SkCanvas *c, Item &item) noexcept
     SkPaint p;
     p.setAntiAlias(false);
     p.setImageFilter(blurFilter);
-    c->drawImageRect(shelf().trashFullIcon, rect, linear, &p);
+
+    if (&item == shelf().draggedItem)
+        p.setColorFilter(shelf().darkenFilter);
+
+    c->drawImageRect(
+        empty ? shelf().trashEmptyIcon.pick(item.dock.itemSize) : shelf().trashFullIcon.pick(item.dock.itemSize),
+        rect, linear, &p);
 }
 
 void TrashController::pointerEnterEvent() noexcept
@@ -40,4 +52,29 @@ void TrashController::pointerEnterEvent() noexcept
     Item &item { *shelf().focusedItem };
     Tooltip &tooltip { shelf().focusedItem->dock.tooltip };
     tooltip.showItem(&item);
+}
+
+void TrashController::pointerButtonEvent() noexcept
+{
+    if (shelf().pointerButton == BTN_LEFT && shelf().pointerButtonState == WL_POINTER_BUTTON_STATE_RELEASED)
+        QDesktopServices::openUrl(QUrl(trashDir));
+
+    shelf().focusedItem->dock.update();
+}
+
+void TrashController::onTrashDirChange(const QString &) noexcept
+{
+    auto files = QDir(trashDir).entryList(QDir::NoDotAndDotDot | QDir::AllEntries);
+    setEmpty(files.isEmpty());
+}
+
+void TrashController::setEmpty(bool empty) noexcept
+{
+    if (this->empty == empty)
+        return;
+
+    this->empty = empty;
+
+    for (Item *item : items)
+        item->dock.update();
 }

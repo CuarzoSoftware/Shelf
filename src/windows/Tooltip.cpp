@@ -78,7 +78,7 @@ void Tooltip::paintEvent(SkCanvas *c) noexcept
     // Blur
     p.setMaskFilter(shelf().tooltipBlurMaskFilter);
     p.setBlendMode(SkBlendMode::kSrc);
-    p.setColor(SkColorSetARGB(64, 0, 0, 0));
+    p.setColor(SkColorSetARGB(56, 0, 0, 0));
     p.setStyle(SkPaint::kFill_Style);
     p.setStrokeWidth(0.f);
     p.setAntiAlias(false);
@@ -86,22 +86,52 @@ void Tooltip::paintEvent(SkCanvas *c) noexcept
 
     // Fill
     p.setMaskFilter(nullptr);
-    p.setColor(SkColorSetARGB(248, 245, 245, 245));
+    const uint8_t dockAvgColor[3] {
+        uint8_t(255.f * (shelf().dockGradientColors[0].fR + shelf().dockGradientColors[1].fR) * 0.5f),
+        uint8_t(255.f * (shelf().dockGradientColors[0].fG + shelf().dockGradientColors[1].fG) * 0.5f),
+        uint8_t(255.f * (shelf().dockGradientColors[0].fB + shelf().dockGradientColors[1].fB) * 0.5f)
+    };
+    p.setColor(SkColorSetARGB(248, dockAvgColor[0], dockAvgColor[1], dockAvgColor[2]));
     p.setStyle(SkPaint::kFill_Style);
     p.setStroke(false);
     p.setAntiAlias(true);
     c->drawPath(path, p);
 
-    // Stroke
+    // Stroke white
+    p.setStroke(true);
+    p.setStrokeWidth(1.f);
     p.setBlendMode(SkBlendMode::kSrcOver);
-    p.setColor(SkColorSetARGB(24, 0, 0, 0));
+    p.setColor(SkColorSetARGB(24, 255, 255, 255));
     p.setStyle(SkPaint::kStroke_Style);
     c->drawPath(path, p);
+
+    // Stroke round
+    p.setStroke(true);
+    p.setStrokeWidth(0.45f);
+    p.setBlendMode(SkBlendMode::kSrcOver);
+    p.setColor(SkColorSetARGB(42, 0, 0, 0));
+    p.setStyle(SkPaint::kStroke_Style);
+    c->drawPath(path, p);
+
+    // Stroke lines
+    p.setAntiAlias(false);
+    p.setStrokeWidth(0.5f);
+    p.setBlendMode(SkBlendMode::kSrcOver);
+    p.setColor(SkColorSetARGB(12, 0, 0, 0));
+    p.setStyle(SkPaint::kStroke_Style);
+    c->drawPath(path, p);
+
+    c->restore();
 
     // Text
     p.reset();
     p.setAntiAlias(true);
-    p.setColor(SkColorSetARGB(220, 0, 0, 0));
+
+    if ((dockAvgColor[0] + dockAvgColor[1] + dockAvgColor[2]) / 3 > 126)
+        p.setColor(SkColorSetARGB(229, 0, 0, 0));
+    else
+        p.setColor(SkColorSetARGB(229, 255, 255, 255));
+
     p.setBlendMode(SkBlendMode::kSrc);
 
     SkFontMetrics m;
@@ -110,7 +140,7 @@ void Tooltip::paintEvent(SkCanvas *c) noexcept
     c->drawString(
         text.toUtf8().constData(),
         TOOLTIP_BLUR_RADIUS + (containerSize.width() - textBounds.width()) / 2.f,
-        TOOLTIP_BLUR_RADIUS + (containerSize.height() - shelf().tooltipFont.getSize()) / 2.f + (shelf().tooltipFont.getSize() -  m.fDescent),
+        TOOLTIP_BLUR_RADIUS + (containerSize.height() - shelf().tooltipFont.getSize()) / 2.f + (shelf().tooltipFont.getSize() -  m.fDescent * 0.65f),
         shelf().tooltipFont, p);
 
     c->flush();
@@ -123,7 +153,7 @@ bool Tooltip::updateDimensions() noexcept
 
     shelf().tooltipFont.measureText(text.toUtf8().constData(), text.length(), SkTextEncoding::kUTF8, &textBounds);
 
-    containerSize.fWidth = 2.f * TOOLTIP_PADDING + textBounds.width();
+    containerSize.fWidth = 3.f * TOOLTIP_PADDING + textBounds.width();
     containerSize.fHeight = 2.f * TOOLTIP_PADDING + shelf().tooltipFont.getSize();
 
     const SkISize newSurfaceSize { SkISize::Make(

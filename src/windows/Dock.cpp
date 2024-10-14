@@ -10,11 +10,14 @@
 #include <QtMath>
 #include <chrono>
 
+#include <linux/input-event-codes.h>
+
 #include <items/Item.h>
 #include <controllers/AppController.h>
 #include <windows/Dock.h>
 #include <core/Constants.h>
 #include <core/Shelf.h>
+#include <windows/Popup.h>
 
 static const zwlr_layer_surface_v1_listener wlLayerSurfaceListener
 {
@@ -27,8 +30,6 @@ static const zwlr_layer_surface_v1_listener wlLayerSurfaceListener
             exit(1);
         }
 
-        qInfo() << "Dock size:" << width << height;
-
         Dock &dock { *static_cast<Dock*>(data) };
         zwlr_layer_surface_v1_ack_configure(dock.wlLayerSurface, serial);
 
@@ -37,6 +38,15 @@ static const zwlr_layer_surface_v1_listener wlLayerSurfaceListener
             dock.resize(SkSize::Make(width, DOCK_MAX_HEIGHT));
             dock.setMapped(true);
             dock.update();
+
+            /*
+            new Popup(dock, SkPoint::Make(100, 0),
+            {
+                { "Item 1" },
+                { "Item 2" },
+                { "Item 3" }
+            });
+            */
         }
     },
 
@@ -112,8 +122,6 @@ Dock::~Dock() noexcept
         zwlr_layer_surface_v1_destroy(wlLayerSurface);
         wlLayerSurface = nullptr;
     }
-
-    qInfo() << "Dock destroyed!";
 }
 
 void Dock::createItems() noexcept
@@ -212,7 +220,7 @@ void Dock::drawContainer(SkCanvas *c) noexcept
     sk_sp<SkMaskFilter> blurFilter = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, shadowRadius / 3.f);
     p.setMaskFilter(blurFilter);
     p.setBlendMode(SkBlendMode::kSrc);
-    p.setColor(SkColorSetARGB(128, 0, 0, 0));
+    p.setColor(SkColorSetARGB(59, 0, 0, 0));
     p.setStyle(SkPaint::kFill_Style);
     p.setStrokeWidth(0.f);
     p.setAntiAlias(false);
@@ -220,12 +228,11 @@ void Dock::drawContainer(SkCanvas *c) noexcept
 
     // Container fill
 
-    SkColor4f colors[] = { SkColor4f::FromColor(SkColorSetARGB(253, 248, 244, 246)), SkColor4f::FromColor(SkColorSetARGB(250, 235, 233, 238)) };
-    float positions[] = { 0.0f, 1.0f };  // Corresponding positions for the colors
     SkPoint points [] = {SkPoint::Make(rect.left(), rect.top()), SkPoint::Make(rect.left(), rect.bottom())};
 
     // Create a linear gradient shader
-    sk_sp<SkShader> gradientShader = SkGradientShader::MakeLinear(points, colors, shelf().skColorSpace, positions, 2, SkTileMode::kClamp);
+    sk_sp<SkShader> gradientShader = SkGradientShader::MakeLinear(
+        points, shelf().dockGradientColors, shelf().skColorSpace, shelf().dockGradientPositions, 2, SkTileMode::kClamp);
     p.setShader(gradientShader);
     p.setMaskFilter(nullptr);
     uint8_t color { 240 };
@@ -235,18 +242,30 @@ void Dock::drawContainer(SkCanvas *c) noexcept
     p.setAntiAlias(true);
     c->drawRoundRect(rect, borderRadius, borderRadius, p);
 
-    // Container stroke
+    // Container stroke not antialias
     p.setShader(nullptr);
+
     p.setAntiAlias(false);
     p.setBlendMode(SkBlendMode::kSrcOver);
-    p.setColor(SkColorSetARGB(18, 0, 0, 0));
+    p.setColor(SkColorSetARGB(20, 0, 0, 0));
     p.setStyle(SkPaint::kStroke_Style);
-    p.setStrokeWidth(0.5f);
+    p.setStrokeWidth(0.4f);
     c->drawRoundRect(rect, borderRadius, borderRadius, p);
+
+    // Constainer stroke antialias
     p.setAntiAlias(true);
-    p.setColor(SkColorSetARGB(18, 0, 0, 0));
-    p.setStrokeWidth(0.5f);
+    p.setColor(SkColorSetARGB(39, 0, 0, 0));
+    p.setStrokeWidth(0.38f);
     c->drawRoundRect(rect, borderRadius, borderRadius, p);
+
+    // Shine
+    p.setAntiAlias(true);
+    p.setBlendMode(SkBlendMode::kSrcOver);
+    p.setColor(SkColorSetARGB(32, 255, 255, 255));
+    p.setStyle(SkPaint::kStroke_Style);
+    p.setStrokeWidth(1.25f);
+    const float rad { 0.5f };
+    c->drawRoundRect(SkRect::MakeLTRB(rect.left() + rad, rect.top() + rad, rect.right() - rad, rect.bottom() - rad), borderRadius, borderRadius, p);
 }
 
 void Dock::drawItems(SkCanvas *c) noexcept
@@ -318,6 +337,12 @@ void Dock::pointerEnterEvent() noexcept
 
 void Dock::pointerMotionEvent() noexcept
 {
+    if (shelf().draggedItem)
+    {
+        shelf().draggedItem->controller.pointerMotionEvent();
+        return;
+    }
+
     Item *newFocusedItem { nullptr };
 
     SkRect rect;
@@ -362,8 +387,31 @@ void Dock::pointerMotionEvent() noexcept
     }
 }
 
+void Dock::pointerButtonEvent() noexcept
+{    
+    if (shelf().pointerButton == BTN_LEFT)
+    {
+        if (shelf().pointerButtonState == WL_POINTER_BUTTON_STATE_PRESSED)
+            shelf().draggedItem = shelf().focusedItem;
+        else
+            shelf().draggedItem = nullptr;
+    }
+    else if (shelf().pointerButton == BTN_RIGHT)
+    {
+
+    }
+
+    if (shelf().focusedItem)
+        shelf().focusedItem->controller.pointerButtonEvent();
+}
+
 void Dock::pointerLeaveEvent() noexcept
 {
+    shelf().draggedItem = nullptr;
+
+    if (shelf().popup && &shelf().popup->dock == this)
+        return;
+
     if (!sliding && visibility != 0.f)
         animateVisibility(1.f, 0.f, DOCK_SLIDE_ANIM_MS);
 

@@ -9,6 +9,7 @@
 #include <EGL/egl.h>
 #include <include/core/SkSize.h>
 #include <include/core/SkSurface.h>
+#include <wayland-cursor.h>
 
 class Window : public Object, public Renderable, public PointerEventsListener
 {
@@ -17,7 +18,8 @@ public:
     enum class Type
     {
         Dock,
-        Tooltip
+        Tooltip,
+        Popup
     };
 
     Window(Type type) noexcept;
@@ -38,7 +40,7 @@ public:
 
     bool hasPointerFocus() const noexcept;
 
-    virtual void beforePaintEvent() noexcept = 0;
+    virtual void beforePaintEvent() noexcept {}
     virtual void afterPaintEvent() noexcept {}
     virtual void scaleChanged() noexcept { update(); }
     virtual void sizeChanged() noexcept {}

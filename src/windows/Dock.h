@@ -33,6 +33,7 @@ public:
 
     void pointerEnterEvent() noexcept override;
     void pointerMotionEvent() noexcept override;
+    void pointerButtonEvent() noexcept override;
     void pointerLeaveEvent() noexcept override;
 
     void animateVisibility(float from, float to, int64_t ms) noexcept;
@@ -44,7 +45,7 @@ public:
     /* Dimensions */
 
     SkRect rect;
-    float dockScale { 1.f };
+    float dockScale { 0.9f };
     float borderRadius;
     float paddingT, paddingL, paddingR;
     float shadowRadius, shadowOffsetY;

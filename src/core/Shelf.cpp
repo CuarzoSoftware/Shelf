@@ -11,6 +11,17 @@
 #include <windows/Dock.h>
 #include <input/Seat.h>
 
+#include <protocols/xdg-shell.h>
+#include <protocols/wlr-layer-shell-unstable-v1.h>
+
+static const xdg_wm_base_listener xdgWmBaseListener
+{
+    .ping = [](void *data, xdg_wm_base *xdgWmBase, uint32_t serial)
+    {
+        xdg_wm_base_pong(xdgWmBase, serial);
+    }
+};
+
 static const wl_registry_listener wlRegistryListener {
 .global = [](void *data, wl_registry *wlRegistry, uint32_t name, const char *interface, uint32_t version)
 {
@@ -31,6 +42,19 @@ static const wl_registry_listener wlRegistryListener {
     if (!shelf.wlLayerShell && strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0)
     {
         shelf.wlLayerShell = (zwlr_layer_shell_v1*)wl_registry_bind(wlRegistry, name, &zwlr_layer_shell_v1_interface, 1);
+        return;
+    }
+
+    if (!shelf.wlShm && strcmp(interface, wl_shm_interface.name) == 0)
+    {
+        shelf.wlShm = (wl_shm*)wl_registry_bind(wlRegistry, name, &wl_shm_interface, 1);
+        return;
+    }
+
+    if (!shelf.xdgWmBase && strcmp(interface, xdg_wm_base_interface.name) == 0)
+    {
+        shelf.xdgWmBase = (xdg_wm_base*)wl_registry_bind(wlRegistry, name, &xdg_wm_base_interface, 1);
+        xdg_wm_base_add_listener(shelf.xdgWmBase, &xdgWmBaseListener, NULL);
         return;
     }
 
@@ -84,16 +108,48 @@ static const wl_registry_listener wlRegistryListener {
     }
 }};
 
+void Shelf::setCursor(ShelfCursor cursor) noexcept
+{
+    if (!get().currentWlPointer)
+        return;
+
+    if (cursor == get().currentCursor)
+        return;
+    else if (cursor == CursorHidden)
+    {
+        get().currentCursor = cursor;
+
+        wl_pointer_set_cursor(
+            get().currentWlPointer,
+            get().pointerEnterSerial,
+            NULL, 0, 0);
+    }
+    else
+    {
+        get().currentCursor = cursor;
+
+        wl_pointer_set_cursor(
+            get().currentWlPointer,
+            get().pointerEnterSerial,
+            cursors[cursor].surface,
+            cursors[cursor].cursor->images[0]->hotspot_x * 0.5f,
+            cursors[cursor].cursor->images[0]->hotspot_y * 0.5f);
+    }
+}
+
 int Shelf::init() noexcept
 {
     if (!initWayland())
-        return EXIT_FAILURE;
+        return -1;
+
+    if (!initCursors())
+        return -1;
 
     if (!initEGL())
-        return EXIT_FAILURE;
+        return -1;
 
     if (!initSkia())
-        return EXIT_FAILURE;
+        return -1;
 
     initConfig();
 
@@ -102,13 +158,9 @@ int Shelf::init() noexcept
     /* Get wl_outputs */
     initDocks();
 
-    while (running)
-    {
-        if (wl_display_dispatch(wlDisplay) == -1)
-            return EXIT_FAILURE;
-    };
+    flush();
 
-    return EXIT_SUCCESS;
+    return wl_display_get_fd(wlDisplay);
 }
 
 bool Shelf::initWayland() noexcept
@@ -143,6 +195,18 @@ bool Shelf::initWayland() noexcept
         return false;
     }
 
+    if (!wlShm)
+    {
+        qFatal() << "Could not get wl_shm version 1.";
+        return false;
+    }
+
+    if (!xdgWmBase)
+    {
+        qFatal() << "Could not get xdg_wm_base version 1.";
+        return false;
+    }
+
     if (seats.empty())
     {
         qFatal() << "Could not get a wl_seat with version 1.";
@@ -150,6 +214,40 @@ bool Shelf::initWayland() noexcept
     }
 
     wlEmptyRegion = wl_compositor_create_region(wlCompositor);
+
+    return true;
+}
+
+bool Shelf::initCursors() noexcept
+{
+    wlCursorTheme = wl_cursor_theme_load(NULL, 48, wlShm);
+
+    if (!wlCursorTheme)
+    {
+        qFatal() << "Failed to load wl_cursor_theme.";
+        return false;
+    }
+
+    for (std::size_t i = 0; i < sizeof(cursors)/sizeof(*cursors); i++)
+    {
+        cursors[i].cursor = wl_cursor_theme_get_cursor(wlCursorTheme, cursors[i].name);
+
+        if (!cursors[i].cursor)
+        {
+            qFatal() << "Failed to load" << cursors[i].name << "wl_cursor.";
+            return false;
+        }
+
+        qInfo() << "Found cursor:" << cursors[i].name;
+
+        cursors[i].surface = wl_compositor_create_surface(wlCompositor);
+        wl_surface_attach(
+            cursors[i].surface,
+            wl_cursor_image_get_buffer(cursors[i].cursor->images[0]),
+            0, 0);
+        wl_surface_set_buffer_scale(cursors[i].surface, 2);
+        wl_surface_commit(cursors[i].surface);
+    }
 
     return true;
 }
@@ -237,7 +335,7 @@ bool Shelf::initSkia() noexcept
 
 bool Shelf::initConfig() noexcept
 {
-    typeface = SkTypeface::MakeFromName(DEFAULT_FONT_FAMILY, SkFontStyle(SkFontStyle::kSemiBold_Weight, SkFontStyle::kSemiBold_Weight, SkFontStyle::kUpright_Slant));
+    typeface = SkTypeface::MakeFromName(DEFAULT_FONT_FAMILY, SkFontStyle::Normal());//SkFontStyle(SkFontStyle::kSemiBold_Weight, SkFontStyle::kSemiBold_Weight, SkFontStyle::kUpright_Slant));
     tooltipFont.setTypeface(typeface);
     tooltipFont.setSize(TOOLTIP_FONT_SIZE);
     tooltipBlurMaskFilter = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, TOOLTIP_BLUR_RADIUS / 3.f);
@@ -245,9 +343,9 @@ bool Shelf::initConfig() noexcept
     QIcon::setThemeName("WhiteSur");
     QIcon::setFallbackThemeName("Paper");
 
-    defaultIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("terminal").pixmap(ICON_SIZE), ICON_SIZE));
-    trashFullIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("user-trash-full").pixmap(ICON_SIZE), ICON_SIZE));
-    trashEmptyIcon = Utils::skImageFromPixmap(Utils::iconApplyShadow(QIcon::fromTheme("user-trash").pixmap(ICON_SIZE), ICON_SIZE));
+    defaultIcon = Utils::multiSizeImageFromPixmap(QIcon::fromTheme("terminal").pixmap(ICON_SIZE));
+    trashFullIcon = Utils::multiSizeImageFromPixmap(QIcon::fromTheme("user-trash-full").pixmap(ICON_SIZE));
+    trashEmptyIcon = Utils::multiSizeImageFromPixmap(QIcon::fromTheme("user-trash").pixmap(ICON_SIZE));
 
     separator.reset(new SeparatorController());
     trash.reset(new TrashController());

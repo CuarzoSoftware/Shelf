@@ -6,6 +6,16 @@
 #include <QIcon>
 #include <QLabel>
 #include <QGraphicsDropShadowEffect>
+#include <core/Constants.h>
+
+MultiSizeImage Utils::multiSizeImageFromPixmap(const QPixmap &pixmap) noexcept
+{
+    return MultiSizeImage {
+        skImageFromPixmap(pixmap.scaled(ICON_SIZE * ICON_SCALE_HIG, ICON_SIZE * ICON_SCALE_HIG, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)),
+        skImageFromPixmap(pixmap.scaled(ICON_SIZE * ICON_SCALE_MED, ICON_SIZE * ICON_SCALE_MED, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)),
+        skImageFromPixmap(pixmap.scaled(ICON_SIZE * ICON_SCALE_LOW, ICON_SIZE * ICON_SCALE_LOW, Qt::IgnoreAspectRatio, Qt::SmoothTransformation))
+    };
+}
 
 sk_sp<SkImage> Utils::skImageFromPixmap(const QPixmap &pixmap) noexcept
 {
@@ -24,35 +34,11 @@ QPixmap Utils::iconFromName(const QString &name, int size) noexcept
     return icon.pixmap(size, size);
 }
 
-QPixmap Utils::iconApplyShadow(const QPixmap &pixmap, int size) noexcept
-{
-    return pixmap;
-    if (pixmap.isNull())
-        return pixmap;
-
-    static QWidget widget{};
-    widget.setFixedSize(size, size);
-    makeWidgetTransparent(&widget);
-
-    static QLabel label {&widget};
-    label.setScaledContents(true);
-    label.setFixedSize(size - 4, size - 4);
-    label.move(2, 2);
-    label.setPixmap(pixmap);
-
-    static QGraphicsDropShadowEffect shadowFx {&label};
-    shadowFx.setBlurRadius(8);
-    shadowFx.setColor(QColor(0, 0, 0, 72));
-    shadowFx.setOffset(0, 1);
-    label.setGraphicsEffect(&shadowFx);
-
-    return widget.grab();
-}
-
 QPixmap Utils::createThumbnail(const QPixmap &pixmap) noexcept
 {
-    QPixmap shadow { iconApplyShadow(pixmap, 64) };
+    //QPixmap shadow { iconApplyShadow(pixmap, 64) };
     QPixmap pix(128, 96);
+    /*
     pix.fill(Qt::transparent);
     QPainter p(&pix);
     p.setBrush(QColor(240, 240, 240, 255));
@@ -63,7 +49,7 @@ QPixmap Utils::createThumbnail(const QPixmap &pixmap) noexcept
     p.setRenderHint(QPainter::RenderHint::Antialiasing);
     p.drawRoundedRect(1, 1, pix.width() - 2, pix.height() - 2, 8, 8);
     p.drawPixmap(16, 48, 32, 32, shadow);
-    p.end();
+    p.end();*/
     return pix;
 }
 

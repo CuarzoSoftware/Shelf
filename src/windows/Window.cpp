@@ -11,8 +11,6 @@ void Window::Listener::preferred_buffer_scale(void *data, wl_surface *wlSurface,
     window.m_scale = factor;
     window.resize(window.m_size);
     window.scaleChanged();
-
-    qInfo() << "New scale" << factor;
 }
 
 void Window::Listener::wl_callback_done(void *data, wl_callback *wlCallback, uint32_t callback_data)

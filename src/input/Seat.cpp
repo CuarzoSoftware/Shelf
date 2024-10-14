@@ -1,14 +1,18 @@
 #include <windows/Window.h>
 #include <core/Shelf.h>
 #include <input/Seat.h>
+#include <wayland-cursor.h>
 
 static const wl_pointer_listener wlPointerListener
 {
-    .enter = [](void *data, wl_pointer *wl_pointer, uint32_t serial, wl_surface *wlSurface, wl_fixed_t surfaceX, wl_fixed_t surfaceY)
+    .enter = [](void *data, wl_pointer *wlPointer, uint32_t serial, wl_surface *wlSurface, wl_fixed_t surfaceX, wl_fixed_t surfaceY)
     {
+        Shelf::get().pointerEnterSerial = serial;
+        Shelf::get().currentWlPointer = wlPointer;
         Shelf::get().focusedWindow = static_cast<Window*>(wl_surface_get_user_data(wlSurface));
         Shelf::get().pointerPos.fX = wl_fixed_to_double(surfaceX);
         Shelf::get().pointerPos.fY = wl_fixed_to_double(surfaceY);
+        Shelf::setCursor(CursorArrow);
         Shelf::get().focusedWindow->pointerEnterEvent();
     },
     .leave = [](void *data, wl_pointer *wl_pointer, uint32_t serial, wl_surface *wlSurface)
@@ -32,7 +36,12 @@ static const wl_pointer_listener wlPointerListener
     },
     .button = [](void *data, wl_pointer *wl_pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state)
     {
-
+        if (Shelf::get().focusedWindow)
+        {
+            Shelf::get().pointerButton = button;
+            Shelf::get().pointerButtonState = state;
+            Shelf::get().focusedWindow->pointerButtonEvent();
+        }
     },
     .axis = [](void *data, wl_pointer *wl_pointer, uint32_t time, uint32_t axis, wl_fixed_t value)
     {
