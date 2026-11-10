@@ -13,6 +13,11 @@
 #include <CZ/Core/Events/CZPointerButtonEvent.h>
 #include <cmath>
 #include <cstdlib>
+#include <unistd.h>
+#include <unordered_map>
+#include <CZ/AK/AKApp.h>
+#include <CZ/XDG/XDGKit.h>
+#include <CZ/XDG/XDGDesktopEntry.h>
 #include <filesystem>
 
 Dock::Dock(MScreen &screen) noexcept :
@@ -67,7 +72,10 @@ Dock::Dock(MScreen &screen) noexcept :
         });
     }
 
-    m_trash = std::make_unique<DockItem>(GetShelf()->assets.trashIcon(), &others);
+    m_trash = std::make_unique<DockItem>(GetShelf()->assets.trashIcon(GetShelf()->trashFull()), &others);
+    GetShelf()->onTrashChanged.subscribe(this, [this]{
+        m_trash->icon.setImage(GetShelf()->assets.trashIcon(GetShelf()->trashFull()));
+    });
     m_trash->label = []{ return std::string("Trash"); };
     setupItem(*m_trash);
     m_trash->onClicked = []{ Shelf::Spawn({ "xdg-open", "trash:///" }); };
@@ -80,6 +88,21 @@ Dock::Dock(MScreen &screen) noexcept :
     screen.onPropsChanged.subscribe(this, [this](MScreen &, CZBitset<MScreen::Changes>){ fitToScreen(); });
 
 
+
+    // Drag & drop over the dock (reordering apps).
+    onDNDEnter.subscribe(this, [this](MDNDOffer &offer, const SkPoint &pos){
+        // Files dragged to the screen edge: show the (auto-hidden) dock so they can reach the trash.
+        m_dndInside = true;
+        if (m_autoHide && !reordering())
+        {
+            m_showTimer.stop();
+            show();
+        }
+        dragOver(offer, pos);
+    });
+    onDNDLeave.subscribe(this, [this](MDNDOffer &){ dndLeft(); });
+    onDNDMotion.subscribe(this, [this](MDNDOffer &offer, const SkPoint &pos){ dragOver(offer, pos); });
+    onDNDDrop.subscribe(this, [this](MDNDOffer &offer, const SkPoint &pos){ dropped(offer, pos); });
 
     GetShelf()->onWindowsChanged.subscribe(this, [this]{ rebuildItems(); });
     rebuildItems();
@@ -123,7 +146,7 @@ Int32 Dock::dockWidth(const DockMetrics &m) const noexcept
 {
     // Mirrors the layout: [padding][apps][gap][divider][gap][minimized windows + trash][padding]
     const auto row { [&m](Int32 n) { return n > 0 ? n * m.tile + (n - 1) * m.spacing : 0; } };
-    const Int32 apps { row(Int32(m_appItems.size())) };
+    const Int32 apps { row(Int32(m_appItems.size()) + deskSlots()) };
     const Int32 others { row(Int32(m_minimizedItems.size()) + 1) };
     const Int32 width { 2 * m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + others };
     return std::max(width, m.minWidth);
@@ -168,6 +191,9 @@ void Dock::applyMetrics() noexcept
 
     m_trash->setMetrics(m);
 
+    if (m_deskItem)
+        m_deskItem->setMetrics(m);
+
     divider.setMetrics(m);
     setBorderRadius(CZBorderRadius::Make(m.radius));
 
@@ -183,9 +209,17 @@ void Dock::applyMetrics() noexcept
 
 void Dock::rebuildItems() noexcept
 {
+    // Not while an app is being dragged (its item must survive): rebuilt when the drag ends.
+    if (reordering())
+    {
+        m_rebuildPending = true;
+        return;
+    }
+
     auto *shelf { GetShelf() };
     auto &assets { shelf->assets };
 
+    syncDeskItem();
     m_appItems.clear();
 
     // Apps: activate the app's most recent window (restoring it if minimized), or launch it if it's
@@ -223,6 +257,7 @@ void Dock::rebuildItems() noexcept
         item->label = [appId = app.appId]{ return GetShelf()->appName(appId); };
         setupItem(*item);
         DockItem *raw { item.get() };
+        item->onDragStarted = [this, raw](const CZPointerButtonEvent &press){ startDrag(*raw, press); };
         item->onContextMenu = [this, raw, appId = app.appId](const CZPointerButtonEvent &e){
             openMenu(*raw, e, [this, appId](Dock &){ buildAppMenu(appId); });
         };
@@ -440,9 +475,9 @@ bool Dock::eventFilter(const CZEvent &event, CZObject &target) noexcept
         m_showTimer.stop();
         hideLabels();
 
-        // Don't hide in the middle of a resize drag (see dividerDragEnded()) or while a context
-        // menu is open (see menuClosed()).
-        if (m_autoHide && !divider.dragging() && !menuOpen())
+        // Don't hide in the middle of a resize drag (see dividerDragEnded()), while a context
+        // menu is open (see menuClosed()) or while an app is being dragged (see endDrag()).
+        if (m_autoHide && !divider.dragging() && !menuOpen() && !reordering())
             hide();
         break;
     default:
@@ -510,7 +545,7 @@ SkIRect Dock::thumbnailRect(Int32 index, Int32 count) const noexcept
     const DockMetrics &m { m_metrics };
     const auto row { [&m](Int32 n) { return n > 0 ? n * m.tile + (n - 1) * m.spacing : 0; } };
 
-    const Int32 apps { row(Int32(m_appItems.size())) };
+    const Int32 apps { row(Int32(m_appItems.size()) + deskSlots()) };
     const Int32 itemsWidth { 2 * m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + row(count + 1) };
     const Int32 dockWidth { std::max(itemsWidth, m.minWidth) };
 
@@ -522,6 +557,230 @@ SkIRect Dock::thumbnailRect(Int32 index, Int32 count) const noexcept
     const Int32 shift { (frame.width() - dockWidth) / 2 };
 
     return SkIRect::MakeXYWH(frame.x() + shift + x, frame.y() + m.paddingTop, m.tile, m.tile);
+}
+
+/* ------------------------------------ Reordering (DND) ------------------------------------ */
+
+void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
+{
+    if (reordering() || menuOpen())
+        return;
+
+    auto it { std::find_if(m_appItems.begin(), m_appItems.end(), [&item](const auto &i){ return i.get() == &item; }) };
+
+    if (it == m_appItems.end())
+        return;
+
+    if (!m_dnd)
+    {
+        m_dnd = std::make_unique<MDND>();
+        m_dndIcon = std::make_unique<AKImageFrame>(m_dnd.get());
+        m_dndIcon->layout().setWidthPercent(100.f);
+        m_dndIcon->layout().setHeightPercent(100.f);
+        m_dnd->onFinished.subscribe(this, [this]{ endDrag(); });
+        m_dnd->onCancelled.subscribe(this, [this]{ endDrag(); });
+
+        // Other clients (e.g. file managers) get the desktop file. The dock itself doesn't need the
+        // data (it already knows what is being dragged), so nothing is written for its own type.
+        m_dnd->onSend = [this](const std::string &mimeType, Int32 fd){
+            if (mimeType != "text/uri-list")
+                return;
+
+            auto entry { GetShelf()->xdgkit ? GetShelf()->xdgkit->desktopEntry(m_dragAppId) : nullptr };
+
+            if (!entry)
+                return;
+
+            const std::string uri { "file://" + entry->path.string() + "\r\n" };
+            [[maybe_unused]] const auto written { write(fd, uri.data(), uri.size()) };
+        };
+    }
+
+    const std::string &appId { item.appId };
+    hideLabels();
+
+    // The icon under the pointer exactly where it was grabbed.
+    m_dndIcon->setImage(GetShelf()->assets.appIcon(appId));
+    m_dnd->layout().setWidth(m_metrics.tile);
+    m_dnd->layout().setHeight(m_metrics.tile);
+    const SkIRect iconRect { item.icon.worldRect() };
+    const SkPoint pointer { AKApp::Get()->pointer().pos() };
+    m_dnd->setHotspot(SkIPoint::Make(
+        std::clamp(Int32(pointer.x()) - iconRect.x(), 0, m_metrics.tile),
+        std::clamp(Int32(pointer.y()) - iconRect.y(), 0, m_metrics.tile)));
+
+    std::vector<std::string> mimeTypes { DOCK_APP_MIME_TYPE };
+
+    if (GetShelf()->xdgkit && GetShelf()->xdgkit->desktopEntry(appId))
+        mimeTypes.emplace_back("text/uri-list");
+
+    m_dragAppId = appId;
+
+    if (!m_dnd->start(*this, press, mimeTypes, CZBitset<MDNDOffer::Action>(MDNDOffer::Move | MDNDOffer::Copy)))
+        return;
+
+    m_dragItem.reset(&item);
+    m_dragStartIndex = size_t(it - m_appItems.begin());
+    m_droppedOnDock = false;
+
+    // Its slot stays (empty) where it would be dropped.
+    item.icon.setIconOpacity(0.f);
+}
+
+bool Dock::overTrash(MDNDOffer &offer, const SkPoint &pos) const noexcept
+{
+    // Files (from any client) over the trash tile. Apps being reordered can't be trashed.
+    return !reordering() && m_trash && offer.hasMimeType("text/uri-list") &&
+           SkRect::Make(m_trash->worldRect()).contains(pos.x(), pos.y());
+}
+
+void Dock::setTrashTarget(bool target) noexcept
+{
+    if (m_trashTarget == target)
+        return;
+
+    // Darkened while it would take the drop, like the macOS Dock.
+    m_trashTarget = target;
+    m_trash->setDropTarget(target);
+}
+
+void Dock::dndLeft() noexcept
+{
+    m_dndInside = false;
+    setTrashTarget(false);
+
+    if (m_autoHide && !m_pointerInside && !reordering() && !menuOpen() && !divider.dragging())
+        hide();
+}
+
+void Dock::dragOver(MDNDOffer &offer, const SkPoint &pos) noexcept
+{
+    if (overTrash(offer, pos))
+    {
+        offer.accept("text/uri-list");
+        offer.setActions(MDNDOffer::Move, MDNDOffer::Move);
+        setTrashTarget(true);
+        return;
+    }
+
+    setTrashTarget(false);
+
+    // Otherwise only our own apps can be dropped here.
+    if (!reordering() || !offer.hasMimeType(DOCK_APP_MIME_TYPE))
+    {
+        offer.accept("");
+        return;
+    }
+
+    offer.accept(DOCK_APP_MIME_TYPE);
+    offer.setActions(MDNDOffer::Move, MDNDOffer::Move);
+
+    // The slot under the pointer (all app slots are the same size).
+    const DockMetrics &m { m_metrics };
+    const SkScalar start { SkScalar(apps.worldRect().x() + deskSlots() * (m.tile + m.spacing)) }; // After Desk's tile
+    const Int32 slot { Int32(std::floor((pos.x() - start + m.spacing * 0.5f) / SkScalar(m.tile + m.spacing))) };
+    moveDraggedItemTo(size_t(std::clamp(slot, 0, Int32(m_appItems.size()) - 1)));
+}
+
+void Dock::dropped(MDNDOffer &offer, const SkPoint &pos) noexcept
+{
+    if (overTrash(offer, pos))
+    {
+        // Read the file list asynchronously (the source writes it from its own event loop).
+        const Int32 fd { offer.receive("text/uri-list") };
+        offer.finish();
+        GetShelf()->trashDroppedFiles(fd);
+        dndLeft(); // No leave event follows a drop
+        return;
+    }
+
+    if (!reordering() || !offer.hasMimeType(DOCK_APP_MIME_TYPE))
+    {
+        dndLeft();
+        return;
+    }
+
+    dragOver(offer, pos);
+    m_droppedOnDock = true;
+
+    // Complete the session (the data itself isn't needed, see onSend).
+    if (const Int32 fd { offer.receive(DOCK_APP_MIME_TYPE) }; fd >= 0)
+        close(fd);
+
+    offer.finish();
+}
+
+void Dock::moveDraggedItemTo(size_t index) noexcept
+{
+    auto cur { std::find_if(m_appItems.begin(), m_appItems.end(), [this](const auto &i){ return i.get() == m_dragItem.get(); }) };
+
+    if (cur == m_appItems.end() || size_t(cur - m_appItems.begin()) == index)
+        return;
+
+    // FLIP: remember where every item is drawn, move the slot, then slide each item from its old
+    // place to its new one.
+    std::unordered_map<DockItem*, SkScalar> before;
+
+    for (auto &item : m_appItems)
+        before[item.get()] = item->layout().calculatedLeft();
+
+    auto dragged { std::move(*cur) };
+    m_appItems.erase(cur);
+    m_appItems.insert(m_appItems.begin() + std::ptrdiff_t(index), std::move(dragged));
+
+    DockItem *item { m_appItems[index].get() };
+
+    if (index + 1 < m_appItems.size())
+        item->insertBefore(m_appItems[index + 1].get());
+    else if (index > 0)
+        item->insertAfter(m_appItems[index - 1].get());
+
+    for (auto &i : m_appItems)
+        i->slideFrom(0.f);
+
+    scene().root()->layout().calculate();
+
+    for (auto &i : m_appItems)
+        if (i.get() != m_dragItem.get())
+            i->slideFrom(before[i.get()] - i->layout().calculatedLeft());
+}
+
+void Dock::endDrag() noexcept
+{
+    if (!reordering())
+        return;
+
+    DockItem *item { m_dragItem.get() };
+    const bool dropped { m_droppedOnDock };
+
+    if (!dropped)
+        moveDraggedItemTo(m_dragStartIndex); // Rejected or dropped elsewhere: back to its place
+
+    item->icon.setIconOpacity(1.f);
+    m_dragItem.reset();
+    m_droppedOnDock = false;
+
+    if (dropped)
+    {
+        // The new order sticks: the pinned apps in dock order, including the dragged one (dropping a
+        // running app in place keeps it in the dock, like macOS).
+        std::vector<std::string> pinned;
+
+        for (const auto &i : m_appItems)
+            if (i->appId == m_dragAppId || GetShelf()->isPinned(i->appId))
+                pinned.emplace_back(i->appId);
+
+        GetShelf()->setPinnedApps(pinned);
+    }
+
+    if (m_rebuildPending)
+    {
+        m_rebuildPending = false;
+        rebuildItems();
+    }
+
+    if (!dropped && m_autoHide && !m_pointerInside)
+        hide();
 }
 
 /* -------------------------------------- Launch bounce -------------------------------------- */
@@ -557,6 +816,42 @@ Dock::HoverLabel::HoverLabel() noexcept
     text.setTextColor(AKTheme::Text);
     text.layout().setMargin(YGEdgeHorizontal, 6.f);
     text.layout().setMargin(YGEdgeVertical, 1.f);
+}
+
+void Dock::syncDeskItem() noexcept
+{
+    const bool running { GetShelf()->deskRunning() };
+
+    if (!running)
+    {
+        if (m_deskItem)
+        {
+            hideLabels();
+            m_deskItem.reset();
+        }
+        return;
+    }
+
+    if (m_deskItem)
+        return;
+
+    m_deskItem = std::make_unique<DockItem>(GetShelf()->assets.deskIcon(), &apps);
+
+    // Always first (the app items are appended after it).
+    if (!apps.children().empty() && apps.children().front() != m_deskItem.get())
+        m_deskItem->insertBefore(apps.children().front());
+
+    m_deskItem->label = []{ return std::string("Desk"); };
+    m_deskItem->setRunning(true);
+    m_deskItem->onClicked = []{ GetShelf()->openDeskWindow(); };
+    m_deskItem->onContextMenu = [this](const CZPointerButtonEvent &e){
+        openMenu(*m_deskItem, e, [](Dock &dock){
+            dock.addMenuAction("New Window", []{ GetShelf()->openDeskWindow(); });
+        });
+    };
+    // No onDragStarted: it can't be moved.
+    setupItem(*m_deskItem);
+    m_deskItem->setMetrics(m_metrics);
 }
 
 void Dock::setupItem(DockItem &item) noexcept

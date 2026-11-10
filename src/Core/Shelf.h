@@ -11,6 +11,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <filesystem>
+
+struct sd_bus_slot;
+namespace CZ { class CZEventSource; }
 
 /**
  * @brief The Shelf dock app: owns the Marco app, the shared assets, the window model and one Dock
@@ -50,6 +54,9 @@ public:
     /// Pins / unpins an app (saved to the settings file).
     void setPinned(const std::string &appId, bool pinned) noexcept;
 
+    /// Replaces the pinned apps (and their order), e.g. after reordering them in the dock.
+    void setPinnedApps(const std::vector<std::string> &appIds) noexcept;
+
     /// Dock auto-hide, on every screen (saved in the settings).
     bool autoHide() const noexcept;
     void setAutoHide(bool enabled) noexcept;
@@ -70,7 +77,28 @@ public:
     /// All toplevels, in the order they appeared.
     const std::vector<MForeignToplevel*> &windows() const noexcept { return m_windows; }
 
-    /// Emitted after apps() or minimized() change.
+    /// Whether Desk (the desktop) is running: the dock then shows a fixed Desk tile first, like the
+    /// macOS Dock's Finder. Tracked through its org.cuarzo.Desk session bus name.
+    bool deskRunning() const noexcept { return m_deskRunning; }
+
+    /// Asks Desk to open a file manager window (the Desk tile's click).
+    void openDeskWindow() noexcept;
+
+    /// Whether the home trash has files (the trash tile shows the full icon).
+    bool trashFull() const noexcept { return m_trashFull; }
+
+    /// Emitted after trashFull() changes.
+    CZSignal<> onTrashChanged;
+
+    /**
+     * @brief Moves the files of a dropped `text/uri-list` to the trash.
+     *
+     * @param fd The read end of the drop's data pipe (owned: closed when done). Read without
+     *           blocking the event loop.
+     */
+    void trashDroppedFiles(Int32 fd) noexcept;
+
+    /// Emitted after apps(), minimized() or deskRunning() change.
     CZSignal<> onWindowsChanged;
 
 private:
@@ -78,6 +106,11 @@ private:
     void onScreenUnplugged(MScreen &screen) noexcept;
 
     void initWindows() noexcept;
+    void initDeskWatch() noexcept;
+    void initTrashWatch() noexcept;
+    void updateTrashState() noexcept;
+    void trashFiles(const std::vector<std::filesystem::path> &paths) noexcept;
+    void setDeskRunning(bool running) noexcept;
     void addWindow(MForeignToplevel *window) noexcept;
     void removeWindow(MForeignToplevel *window) noexcept;
     void updateModel() noexcept;
@@ -85,6 +118,13 @@ private:
     std::vector<MForeignToplevel*> m_windows; // In the order they appeared
     std::vector<App> m_apps;
     std::vector<MForeignToplevel*> m_minimized;
+    bool m_deskRunning { false };
+    bool m_trashFull { false };
+    Int32 m_inotify { -1 }, m_trashWatch { -1 }, m_trashFilesWatch { -1 };
+    std::shared_ptr<CZEventSource> m_inotifySource;
+    std::vector<std::shared_ptr<CZEventSource>> m_dropReaders; // Dropped uri-lists being read
+    sd_bus_slot *m_deskMatch {};
+    std::shared_ptr<CZBus> m_bus;
 };
 
 #endif // SHELF_H

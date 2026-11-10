@@ -112,6 +112,15 @@ constexpr SkScalar DOCK_LABEL_FONT_SIZE { 13.f };
 // window into (out of) them. Matches cz-crystals' minimize animation.
 constexpr UInt32 DOCK_MINIMIZE_MS       { 420 };
 
+// --- Reordering (drag & drop) -------------------------------------------------------------------
+
+// Pointer travel (units) with the button held on an app before it starts being dragged.
+constexpr SkScalar DOCK_DRAG_THRESHOLD  { 4.f };
+// Icons sliding aside to make room for the dragged one.
+constexpr UInt32   DOCK_REORDER_MS      { 220 };
+// Private MIME type of dragged dock apps (the data is the app id).
+#define DOCK_APP_MIME_TYPE "application/x-cz-shelf-app"
+
 // --- Launch bounce ---------------------------------------------------------------------------
 
 // One bounce of the icon of an app being launched (up and back down).
@@ -127,6 +136,10 @@ constexpr UInt32   DOCK_BOUNCE_TIMEOUT_MS { 10000 };
 
 // Icons are loaded once at this size (px) so they stay sharp up to DOCK_TILE_SIZE_MAX at 2x.
 constexpr Int32 DOCK_ICON_LOAD_SIZE     { 256 };
+constexpr SkScalar DOCK_ITEM_DARKEN     { 0.6f };  // Color factor of a pressed item / drop target
+constexpr SkColor  DOCK_ICON_SHADOW_COLOR    { 0x38000000 }; // Faint shadow following each icon's shape
+constexpr SkScalar DOCK_ICON_SHADOW_RADIUS   { 6.f };
+constexpr Int32    DOCK_ICON_SHADOW_OFFSET_Y { 1 };
 
 // Running indicator under app icons.
 inline const CZ::CZAdaptiveColor DOCK_INDICATOR_COLOR { 0xB3000000, 0xE6FFFFFF };

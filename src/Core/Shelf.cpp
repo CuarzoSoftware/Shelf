@@ -4,6 +4,14 @@
 #include <CZ/Marco/MScreen.h>
 #include <CZ/Marco/Extensions/MForeignToplevel.h>
 #include <CZ/XDG/XDGDesktopEntry.h>
+#include <CZ/Core/CZBus.h>
+#include <CZ/Core/CZEventSource.h>
+#include <CZ/Core/CZTimer.h>
+#include <CZ/XDG/XDGTrash.h>
+#include <sys/inotify.h>
+#include <fcntl.h>
+#include <cerrno>
+#include <systemd/sd-bus.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -30,6 +38,8 @@ Shelf::Shelf() noexcept
     settings.load();
     assets.init();
     initWindows();
+    initDeskWatch();
+    initTrashWatch();
 
     marco->onScreenPlugged.subscribe(this, [this](MScreen &s){ onScreenPlugged(s); });
     marco->onScreenUnplugged.subscribe(this, [this](MScreen &s){ onScreenUnplugged(s); });
@@ -40,6 +50,15 @@ Shelf::Shelf() noexcept
 
 Shelf::~Shelf() noexcept
 {
+    if (m_deskMatch)
+        sd_bus_slot_unref(m_deskMatch);
+
+    m_dropReaders.clear();
+    m_inotifySource.reset();
+
+    if (m_inotify >= 0)
+        close(m_inotify);
+
     if (marco)
         for (MScreen *s : marco->screens())
             onScreenUnplugged(*s);
@@ -143,6 +162,172 @@ void Shelf::updateModel() noexcept
     onWindowsChanged.notify();
 }
 
+/* ------------------------------------------ Desk ------------------------------------------ */
+
+static constexpr const char *DeskBusName { "org.cuarzo.Desk" };
+
+void Shelf::initDeskWatch() noexcept
+{
+    // Kept: the connection closes when its last reference goes away.
+    m_bus = CZBus::GetOrMakeUser();
+    auto &bus { m_bus };
+
+    if (!bus)
+        return;
+
+    // Desk appearing / disappearing...
+    sd_bus_match_signal_async(bus->bus(), &m_deskMatch, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+        "org.freedesktop.DBus", "NameOwnerChanged",
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            const char *name {}, *oldOwner {}, *newOwner {};
+
+            if (sd_bus_message_read(m, "sss", &name, &oldOwner, &newOwner) >= 0 && name && strcmp(name, DeskBusName) == 0)
+                static_cast<Shelf*>(data)->setDeskRunning(newOwner && newOwner[0]);
+
+            return 0;
+        }, nullptr, this);
+
+    // ...and whether it's already running.
+    sd_bus_call_method_async(bus->bus(), nullptr, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+        "org.freedesktop.DBus", "NameHasOwner",
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            int has { 0 };
+
+            if (!sd_bus_message_is_method_error(m, nullptr) && sd_bus_message_read(m, "b", &has) >= 0 && _shelf == data)
+                static_cast<Shelf*>(data)->setDeskRunning(has);
+
+            return 0;
+        }, this, "s", DeskBusName);
+
+    // Async requests are only queued: send them now (the bus source only waits for input).
+    sd_bus_flush(bus->bus());
+}
+
+void Shelf::setDeskRunning(bool running) noexcept
+{
+    if (m_deskRunning == running)
+        return;
+
+    m_deskRunning = running;
+    Log(CZInfo, CZLN, "Desk {}", running ? "running" : "stopped");
+    onWindowsChanged.notify();
+}
+
+void Shelf::openDeskWindow() noexcept
+{
+    if (auto &bus { m_bus })
+    {
+        sd_bus_call_method_async(bus->bus(), nullptr, DeskBusName, "/org/cuarzo/Desk", "org.cuarzo.Desk", "NewWindow",
+                                 nullptr, nullptr, "");
+        sd_bus_flush(bus->bus());
+    }
+}
+
+/* ------------------------------------------ Trash ------------------------------------------ */
+
+void Shelf::initTrashWatch() noexcept
+{
+    m_inotify = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+
+    if (m_inotify < 0)
+    {
+        Log(CZWarning, CZLN, "inotify unavailable: the trash icon won't follow the trash state");
+        updateTrashState();
+        return;
+    }
+
+    m_inotifySource = CZEventSource::Make(m_inotify, EPOLLIN, CZOwn::Borrow, [this](int fd, UInt32, CZEventSource*){
+        alignas(inotify_event) char buf[4096];
+        while (read(fd, buf, sizeof(buf)) > 0) {}
+        updateTrashState();
+    });
+
+    updateTrashState();
+}
+
+void Shelf::updateTrashState() noexcept
+{
+    // (Re)watch the trash and its files directory: either may be created, deleted or replaced
+    // (e.g. emptied by removing the whole directory).
+    if (m_inotify >= 0)
+    {
+        const std::filesystem::path trash { XDGTrash::HomeDir() };
+        std::error_code ec;
+        std::filesystem::create_directories(trash / "files", ec);
+
+        // Adding an existing watch just returns it (no removal: that would queue IN_IGNORED events,
+        // which would bring us back here endlessly). Deleted directories drop their watch.
+        constexpr UInt32 mask { IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF | IN_MOVE_SELF };
+        m_trashWatch = inotify_add_watch(m_inotify, trash.c_str(), mask);
+        m_trashFilesWatch = inotify_add_watch(m_inotify, (trash / "files").c_str(), mask);
+    }
+
+    const bool full { !XDGTrash::IsEmpty() };
+
+    if (full == m_trashFull)
+        return;
+
+    m_trashFull = full;
+    onTrashChanged.notify();
+}
+
+void Shelf::trashFiles(const std::vector<std::filesystem::path> &paths) noexcept
+{
+    for (const auto &path : paths)
+    {
+        std::string error;
+
+        switch (XDGTrash::MoveToTrash(path, &error))
+        {
+        case XDGTrash::Result::Trashed:
+            Log(CZInfo, CZLN, "Moved {} to the trash", path.string());
+            break;
+        case XDGTrash::Result::OtherDevice:
+            Spawn({ "gio", "trash", path.string() }); // Its device's own trash
+            break;
+        case XDGTrash::Result::Failed:
+            Log(CZError, CZLN, "Can't move {} to the trash: {}", path.string(), error);
+            break;
+        }
+    }
+
+    updateTrashState();
+}
+
+void Shelf::trashDroppedFiles(Int32 fd) noexcept
+{
+    if (fd < 0)
+        return;
+
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    auto data { std::make_shared<std::string>() };
+
+    // The source writes the list asynchronously (it may even be busy): read as it arrives.
+    auto reader { CZEventSource::Make(fd, EPOLLIN | EPOLLHUP, CZOwn::Own, [this, data](int fd, UInt32, CZEventSource *source){
+        char buf[4096];
+        ssize_t n;
+
+        while ((n = read(fd, buf, sizeof(buf))) > 0)
+            data->append(buf, size_t(n));
+
+        if (n < 0 && (errno == EAGAIN || errno == EINTR))
+            return; // More to come
+
+        // EOF (or error): done.
+        trashFiles(XDGTrash::ParseUriList(*data));
+
+        // Drop the source outside its own callback.
+        CZTimer::OneShot(0, [this, source](CZTimer*){
+            std::erase_if(m_dropReaders, [source](const auto &r){ return r.get() == source; });
+        });
+    }) };
+
+    if (reader)
+        m_dropReaders.emplace_back(std::move(reader));
+    else
+        close(fd);
+}
+
 /* --------------------------------- Pinned apps / launching --------------------------------- */
 
 std::string Shelf::appName(const std::string &appId) const noexcept
@@ -204,6 +389,16 @@ void Shelf::setPinned(const std::string &appId, bool pinned) noexcept
         std::erase(settings.pinnedApps, appId);
 
     Log(CZInfo, CZLN, "{} {}", pinned ? "Pinned" : "Unpinned", appId);
+    settings.save();
+    updateModel();
+}
+
+void Shelf::setPinnedApps(const std::vector<std::string> &appIds) noexcept
+{
+    if (settings.pinnedApps == appIds)
+        return;
+
+    settings.pinnedApps = appIds;
     settings.save();
     updateModel();
 }

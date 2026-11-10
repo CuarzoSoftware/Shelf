@@ -49,12 +49,12 @@ LaunchBounce::~LaunchBounce()
 void LaunchBounce::setItem(DockItem *item) noexcept
 {
     if (m_item && m_item != item)
-        m_item->icon.setOpacity(1.f);
+        m_item->icon.setIconOpacity(1.f);
 
     m_item.reset(item);
 
     if (m_item)
-        m_item->icon.setOpacity(m_finished ? 1.f : 0.f);
+        m_item->icon.setIconOpacity(m_finished ? 1.f : 0.f);
 
     updatePosition();
 }
@@ -88,7 +88,7 @@ void LaunchBounce::finish() noexcept
     m_finished = true;
 
     if (m_item)
-        m_item->icon.setOpacity(1.f);
+        m_item->icon.setIconOpacity(1.f);
 
     setMapped(false);
 

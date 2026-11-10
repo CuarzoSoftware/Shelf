@@ -9,6 +9,7 @@
 #include <Surfaces/LaunchBounce.h>
 #include <CZ/Marco/Roles/MLayerSurface.h>
 #include <CZ/Marco/Roles/MTooltip.h>
+#include <CZ/Marco/Roles/MDND.h>
 #include <CZ/Marco/Nodes/MMenuView.h>
 #include <CZ/Marco/Nodes/MMenuAction.h>
 #include <CZ/Marco/Nodes/MMenuDivider.h>
@@ -82,6 +83,9 @@ public:
 
     bool menuOpen() const noexcept { return m_menu && m_menu->mapped(); }
 
+    /// An app is being dragged to a new place.
+    bool reordering() const noexcept { return m_dragItem != nullptr; }
+
     /// Menu building helpers (only valid inside a MenuBuilder).
     MMenuAction &addMenuAction(const std::string &text, std::function<void()> onClicked, bool enabled = true) noexcept;
     void addMenuDivider() noexcept;
@@ -103,12 +107,22 @@ private:
     Int32 dockWidth(const DockMetrics &m) const noexcept;
     Int32 availableWidth() const noexcept;
     void rebuildItems() noexcept;
+    void syncDeskItem() noexcept;
+    Int32 deskSlots() const noexcept { return m_deskItem ? 1 : 0; }
     void menuClosed() noexcept;
     void buildAppMenu(const std::string &appId) noexcept;
     void buildWindowMenu(MForeignToplevel *window) noexcept;
     void buildTrashMenu() noexcept;
     void setupItem(DockItem &item) noexcept;
     void reportThumbnailRects() noexcept;
+    void startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept;
+    void dragOver(MDNDOffer &offer, const SkPoint &pos) noexcept;
+    void dropped(MDNDOffer &offer, const SkPoint &pos) noexcept;
+    void moveDraggedItemTo(size_t index) noexcept;
+    void endDrag() noexcept;
+    bool overTrash(MDNDOffer &offer, const SkPoint &pos) const noexcept;
+    void setTrashTarget(bool target) noexcept;
+    void dndLeft() noexcept;
     SkIRect thumbnailRect(Int32 index, Int32 count) const noexcept;
     void itemHoverChanged(DockItem &item, bool hovered) noexcept;
     void showLabel(DockItem &item) noexcept;
@@ -128,10 +142,25 @@ private:
     std::vector<std::unique_ptr<DockItem>> m_minimizedItems;
     std::unique_ptr<DockItem> m_trash;
 
+    // Desk's tile (while it runs): always the first app, can't be moved (like Finder's).
+    std::unique_ptr<DockItem> m_deskItem;
+
+    // Reordering: the drag & drop session (icon surface, reused) and the item being dragged. Its
+    // icon is hidden while dragged; its slot moves to wherever it would be dropped.
+    std::unique_ptr<MDND> m_dnd;
+    std::unique_ptr<AKImageFrame> m_dndIcon;
+    CZWeak<DockItem> m_dragItem;
+    std::string m_dragAppId;
+    size_t m_dragStartIndex { 0 };
+    bool m_droppedOnDock { false };
+    bool m_rebuildPending { false };
+
     // Launch feedback, by app id.
     std::unordered_map<std::string, std::unique_ptr<LaunchBounce>> m_bounces;
 
     bool m_autoHide { true };
+    bool m_dndInside { false };   // A drag & drop session is over the dock (from any client)
+    bool m_trashTarget { false }; // Files are being dragged over the trash
     bool m_pointerInside { false };
 
     // 0 = hidden, 1 = shown

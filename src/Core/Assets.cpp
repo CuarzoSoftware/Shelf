@@ -112,8 +112,16 @@ std::shared_ptr<RImage> Assets::windowIcon() noexcept
     return themedIcon({ "preferences-system-windows", "window", "application-x-executable" });
 }
 
-std::shared_ptr<RImage> Assets::trashIcon() noexcept
+std::shared_ptr<RImage> Assets::deskIcon() noexcept
 {
+    return themedIcon({ "system-file-manager", "org.gnome.Nautilus", "file-manager", "user-home" });
+}
+
+std::shared_ptr<RImage> Assets::trashIcon(bool full) noexcept
+{
+    if (full)
+        return themedIcon({ "user-trash-full", "user-trash" });
+
     return themedIcon({ "user-trash", "user-trash-full" });
 }
 

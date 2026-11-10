@@ -3,6 +3,8 @@
 #include <CZ/AK/AKScene.h>
 #include <CZ/Core/Events/CZPointerButtonEvent.h>
 #include <CZ/Core/CZEase.h>
+#include <CZ/Core/Events/CZPointerMoveEvent.h>
+#include <cmath>
 #include <CZ/Core/Events/CZPointerEnterEvent.h>
 #include <CZ/Core/Events/CZPointerLeaveEvent.h>
 
@@ -16,7 +18,10 @@ DockItem::DockItem(std::shared_ptr<RImage> image, AKNode *parent) noexcept :
             setItemScale(m_scaleTo);
             if (auto done { std::move(m_scaleDone) })
                 done();
-        })
+        }),
+    m_slideAnim(DOCK_REORDER_MS,
+        [this](CZAnimation *a) { setSlideOffset(m_slideFrom * (1.f - SkScalar(CZEase::OutCubic(a->value())))); },
+        [this](CZAnimation *) { setSlideOffset(0.f); })
 {
     SkRegion empty;
 
@@ -92,6 +97,26 @@ void DockItem::setBadge(std::shared_ptr<RImage> image) noexcept
     badge.setVisible(image != nullptr);
 }
 
+void DockItem::setDropTarget(bool target) noexcept
+{
+    m_dropTarget = target;
+    updateDarkening();
+}
+
+void DockItem::setPressed(bool pressed) noexcept
+{
+    m_darkPressed = pressed;
+    updateDarkening();
+}
+
+void DockItem::updateDarkening() noexcept
+{
+    // Multiplies the colors (rather than fading): darker over any background.
+    const SkScalar f { (m_dropTarget || m_darkPressed) ? DOCK_ITEM_DARKEN : 1.f };
+    icon.setColorFactor({ f, f, f, 1.f });
+    badge.setColorFactor({ f, f, f, 1.f });
+}
+
 void DockItem::setRunning(bool running) noexcept
 {
     indicator.setVisible(running);
@@ -112,6 +137,7 @@ void DockItem::pointerButtonEvent(const CZPointerButtonEvent &event)
     if (event.button == BTN_RIGHT && event.pressed)
     {
         m_pressed = false;
+        setPressed(false);
         if (onContextMenu)
             onContextMenu(event);
         return;
@@ -121,10 +147,17 @@ void DockItem::pointerButtonEvent(const CZPointerButtonEvent &event)
         return;
 
     if (event.pressed)
+    {
         m_pressed = true;
+        setPressed(true);
+        m_press = std::static_pointer_cast<CZPointerButtonEvent>(event.copy());
+        m_pressPos = AKApp::Get()->pointer().pos();
+    }
     else if (m_pressed)
     {
         m_pressed = false;
+        setPressed(false);
+        m_press.reset();
 
         // Released over the item (not dragged away).
         if (scene() && scene()->pointerFocus() && (scene()->pointerFocus() == this || scene()->pointerFocus()->isSubchildOf(this)) && onClicked)
@@ -143,8 +176,61 @@ void DockItem::pointerEnterEvent(const CZPointerEnterEvent &event)
 void DockItem::pointerLeaveEvent(const CZPointerLeaveEvent &event)
 {
     AKContainer::pointerLeaveEvent(event);
+
+    setPressed(false);
+
+    // Left with the button held: dragged out quickly.
+    if (m_pressed && m_press && onDragStarted && !removing)
+    {
+        m_pressed = false;
+        auto press { std::move(m_press) };
+        onDragStarted(*press);
+    }
+
     m_pressed = false;
+    m_press.reset();
 
     if (onHoverChanged)
         onHoverChanged(false);
+}
+
+void DockItem::pointerMoveEvent(const CZPointerMoveEvent &event)
+{
+    AKContainer::pointerMoveEvent(event);
+
+    if (!m_pressed || !m_press || removing || !onDragStarted)
+        return;
+
+    const SkPoint pos { AKApp::Get()->pointer().pos() };
+
+    if (SkPoint::Distance(pos, m_pressPos) < DOCK_DRAG_THRESHOLD)
+        return;
+
+    // A drag, not a click.
+    m_pressed = false;
+    setPressed(false);
+    auto press { std::move(m_press) };
+    onDragStarted(*press);
+}
+
+void DockItem::slideFrom(SkScalar offset) noexcept
+{
+    if (std::fabs(offset) < 0.5f)
+    {
+        m_slideAnim.pause();
+        setSlideOffset(0.f);
+        return;
+    }
+
+    m_slideFrom = offset;
+    setSlideOffset(offset);
+    m_slideAnim.reset();
+}
+
+void DockItem::setSlideOffset(SkScalar offset) noexcept
+{
+    m_slideOffset = offset;
+
+    // A relative offset: moves the item without affecting the layout of the others.
+    layout().setPosition(YGEdgeLeft, offset);
 }

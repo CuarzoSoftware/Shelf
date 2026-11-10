@@ -53,8 +53,11 @@ public:
     /// Generic window icon (minimized windows).
     std::shared_ptr<RImage> windowIcon() noexcept;
 
-    /// Trash icon.
-    std::shared_ptr<RImage> trashIcon() noexcept;
+    /// The Desk tile's icon (the file manager's, like Finder's).
+    std::shared_ptr<RImage> deskIcon() noexcept;
+
+    /// Trash icon (with papers when @p full).
+    std::shared_ptr<RImage> trashIcon(bool full = false) noexcept;
 
 private:
     /// First themed icon found among @p names (cached, including misses).
