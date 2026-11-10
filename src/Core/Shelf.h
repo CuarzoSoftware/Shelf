@@ -3,6 +3,7 @@
 
 #include <Core/Types.h>
 #include <Core/Assets.h>
+#include <Core/Settings.h>
 #include <CZ/Marco/MApp.h>
 #include <CZ/XDG/XDGKit.h>
 #include <CZ/Core/CZObject.h>
@@ -25,19 +26,35 @@ public:
     Shelf() noexcept;
     ~Shelf() noexcept;
 
-    /// The windows of one running app.
+    /// An app shown in the dock: pinned, running, or both.
     struct App
     {
         std::string appId;
-        std::vector<MForeignToplevel*> windows; ///< In the order they appeared
+        bool pinned { false };
+        std::vector<MForeignToplevel*> windows; ///< In the order they appeared (empty = not running)
     };
 
     std::shared_ptr<MApp> marco;
     std::shared_ptr<XDGKit> xdgkit;
     Assets assets;
+    Settings settings;
 
-    /// Running apps, grouped by app id, in the order they first appeared.
+    /// Pinned apps (in pinned order), then the running unpinned ones (in the order they appeared).
     const std::vector<App> &apps() const noexcept { return m_apps; }
+
+    bool isPinned(const std::string &appId) const noexcept;
+
+    /// The app's display name (its desktop entry Name), or the app id if it has none.
+    std::string appName(const std::string &appId) const noexcept;
+
+    /// Pins / unpins an app (saved to the settings file).
+    void setPinned(const std::string &appId, bool pinned) noexcept;
+
+    /// Launches an app through its desktop entry. Returns false if it couldn't be launched.
+    bool launch(const std::string &appId) noexcept;
+
+    /// Runs a command (argv) detached.
+    static bool Spawn(const std::vector<std::string> &argv) noexcept;
 
     /// Minimized windows, in the order they were minimized.
     const std::vector<MForeignToplevel*> &minimized() const noexcept { return m_minimized; }

@@ -2,6 +2,8 @@
 #include <CZ/AK/AKApp.h>
 #include <CZ/AK/AKScene.h>
 #include <CZ/Core/Events/CZPointerButtonEvent.h>
+#include <CZ/Core/Events/CZPointerEnterEvent.h>
+#include <CZ/Core/Events/CZPointerLeaveEvent.h>
 
 DockItem::DockItem(std::shared_ptr<RImage> image, AKNode *parent) noexcept :
     AKContainer(YGFlexDirectionColumn, false, parent)
@@ -65,6 +67,14 @@ void DockItem::pointerButtonEvent(const CZPointerButtonEvent &event)
 {
     AKContainer::pointerButtonEvent(event);
 
+    if (event.button == BTN_RIGHT && event.pressed)
+    {
+        m_pressed = false;
+        if (onContextMenu)
+            onContextMenu(event);
+        return;
+    }
+
     if (event.button != BTN_LEFT)
         return;
 
@@ -78,4 +88,21 @@ void DockItem::pointerButtonEvent(const CZPointerButtonEvent &event)
         if (scene() && scene()->pointerFocus() && (scene()->pointerFocus() == this || scene()->pointerFocus()->isSubchildOf(this)) && onClicked)
             onClicked();
     }
+}
+
+void DockItem::pointerEnterEvent(const CZPointerEnterEvent &event)
+{
+    AKContainer::pointerEnterEvent(event);
+
+    if (onHoverChanged)
+        onHoverChanged(true);
+}
+
+void DockItem::pointerLeaveEvent(const CZPointerLeaveEvent &event)
+{
+    AKContainer::pointerLeaveEvent(event);
+    m_pressed = false;
+
+    if (onHoverChanged)
+        onHoverChanged(false);
 }

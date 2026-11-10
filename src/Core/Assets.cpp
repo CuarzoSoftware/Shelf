@@ -10,7 +10,7 @@
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/XDG/XDGKit.h>
-#include <CZ/XDG/XDGINI.h>
+#include <CZ/XDG/XDGDesktopEntry.h>
 #include <drm_fourcc.h>
 #include <algorithm>
 #include <cctype>
@@ -78,46 +78,8 @@ std::shared_ptr<RImage> Assets::themedIcon(const std::vector<std::string> &names
 std::string Assets::desktopEntryIcon(const std::string &appId) noexcept
 {
     auto &xdgkit { GetShelf()->xdgkit };
-
-    if (appId.empty() || appId.find('/') != std::string::npos || !xdgkit)
-        return {};
-
-    std::vector<fs::path> dirs;
-
-    if (const char *dataHome { getenv("XDG_DATA_HOME") }; dataHome && dataHome[0] == '/')
-        dirs.emplace_back(fs::path(dataHome) / "applications");
-    else if (!xdgkit->homeDir().empty())
-        dirs.emplace_back(xdgkit->homeDir() / ".local/share/applications");
-
-    for (const auto &dir : xdgkit->dataDirs())
-        dirs.emplace_back(dir / "applications");
-
-    // X11 WM_CLASS based ids are often capitalized differently than the .desktop file.
-    std::string lower { appId };
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return std::tolower(c); });
-
-    for (const auto &dir : dirs)
-    {
-        for (const auto &candidate : { appId, lower })
-        {
-            std::error_code ec;
-            const fs::path file { dir / (candidate + ".desktop") };
-
-            if (!fs::is_regular_file(file, ec))
-                continue;
-
-            auto ini { XDGINI::LoadFile(file) };
-            auto entry { ini->find("Desktop Entry") };
-
-            if (entry == ini->end())
-                continue;
-
-            if (auto icon { entry->second.find("Icon") }; icon != entry->second.end() && !icon->second.empty())
-                return icon->second;
-        }
-    }
-
-    return {};
+    auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
+    return entry ? entry->icon : std::string {};
 }
 
 std::shared_ptr<RImage> Assets::appIcon(const std::string &appId) noexcept

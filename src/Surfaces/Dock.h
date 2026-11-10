@@ -7,9 +7,16 @@
 #include <Nodes/DockDivider.h>
 #include <Nodes/DockItem.h>
 #include <CZ/Marco/Roles/MLayerSurface.h>
+#include <CZ/Marco/Roles/MTooltip.h>
+#include <CZ/Marco/Nodes/MMenuView.h>
+#include <CZ/Marco/Nodes/MMenuAction.h>
+#include <CZ/Marco/Nodes/MMenuDivider.h>
+#include <functional>
 #include <CZ/AK/Nodes/AKContainer.h>
 #include <CZ/Core/CZLinearAnimation.h>
 #include <CZ/Core/CZTimer.h>
+#include <CZ/Core/CZWeak.h>
+#include <CZ/AK/Nodes/AKText.h>
 #include <memory>
 #include <vector>
 
@@ -46,6 +53,25 @@ public:
     /// Called by the divider when a resize drag ends.
     void dividerDragEnded() noexcept;
 
+    /// Builds a context menu: add actions/dividers to the view with the helpers below.
+    using MenuBuilder = std::function<void(Dock &dock)>;
+
+    /**
+     * @brief Opens a context menu above @p item (a tooltip whose caret points at it).
+     *
+     * @param event The button press that requested it (used for the popup grab).
+     */
+    void openMenu(DockItem &item, const CZPointerButtonEvent &event, const MenuBuilder &build) noexcept;
+
+    /// Closes the context menu, if open.
+    void closeMenu() noexcept;
+
+    bool menuOpen() const noexcept { return m_menu && m_menu->mapped(); }
+
+    /// Menu building helpers (only valid inside a MenuBuilder).
+    MMenuAction &addMenuAction(const std::string &text, std::function<void()> onClicked, bool enabled = true) noexcept;
+    void addMenuDivider() noexcept;
+
     DockBackground background { this };
     AKContainer items { YGFlexDirectionRow, false, this };
     AKContainer apps { YGFlexDirectionRow, false, &items };
@@ -60,6 +86,14 @@ protected:
 private:
     void applyMetrics() noexcept;
     void rebuildItems() noexcept;
+    void menuClosed() noexcept;
+    void buildAppMenu(const std::string &appId) noexcept;
+    void buildWindowMenu(MForeignToplevel *window) noexcept;
+    void buildTrashMenu() noexcept;
+    void setupItem(DockItem &item) noexcept;
+    void itemHoverChanged(DockItem &item, bool hovered) noexcept;
+    void showLabel(DockItem &item) noexcept;
+    void hideLabels() noexcept;
     void animateTo(Float64 target) noexcept;
     void setProgress(Float64 progress) noexcept;
     void updateInputRegion() noexcept;
@@ -81,6 +115,27 @@ private:
     Float64 m_progress { 0.0 };
     Float64 m_from { 0.0 };
     Float64 m_to { 0.0 };
+
+    // Context menu (reused) and its rows (rebuilt each time it opens).
+    std::unique_ptr<MTooltip> m_menu;
+    std::unique_ptr<MMenuView> m_menuView;
+    std::vector<std::unique_ptr<MMenuItem>> m_menuItems;
+
+    /*
+     * Hover labels: a text tooltip (with background blur) over the hovered item. Two of them, so
+     * switching items maps the new label before unmapping the old one (no gap or flicker).
+     */
+    struct HoverLabel
+    {
+        HoverLabel() noexcept;
+        MTooltip tooltip;
+        AKText text { "", &tooltip };
+        CZWeak<DockItem> item;
+    };
+
+    std::unique_ptr<HoverLabel> m_labels[2];
+    UInt32 m_activeLabel { 0 };
+    CZTimer m_labelHideTimer;
 
     CubicBezier m_ease { DOCK_EASE[0], DOCK_EASE[1], DOCK_EASE[2], DOCK_EASE[3] };
     CZLinearAnimation m_slide;

@@ -27,12 +27,23 @@ public:
     /// Invoked on a left click (press + release over the item).
     std::function<void()> onClicked;
 
+    /// Invoked on a right button press (to open the item's menu).
+    std::function<void(const CZPointerButtonEvent &event)> onContextMenu;
+
+    /// Invoked when the pointer enters (true) or leaves (false) the item.
+    std::function<void(bool hovered)> onHoverChanged;
+
+    /// Text for the hover label (app name, window title, ...). Evaluated when the label is shown.
+    std::function<std::string()> label;
+
     AKImageFrame icon { this };
     AKImageFrame badge { this };
     AKRoundSolidColor indicator { 0, CZBorderRadius::Make(0), this };
 
 protected:
     void pointerButtonEvent(const CZPointerButtonEvent &event) override;
+    void pointerEnterEvent(const CZPointerEnterEvent &event) override;
+    void pointerLeaveEvent(const CZPointerLeaveEvent &event) override;
 
 private:
     void updateIndicatorColor() noexcept;

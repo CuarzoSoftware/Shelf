@@ -94,6 +94,13 @@ constexpr UInt32 DOCK_SLIDE_MS          { 250 };
 // Ease-in-out timing curve (CAMediaTimingFunction easeInEaseOut).
 constexpr Float64 DOCK_EASE[4]          { 0.42, 0.0, 0.58, 1.0 };
 
+// --- Hover labels --------------------------------------------------------------------------
+
+// Grace period after leaving an item before its label hides, so moving across the gap between two
+// items switches labels instead of hiding and showing them.
+constexpr UInt32 DOCK_LABEL_HIDE_DELAY_MS { 120 };
+constexpr SkScalar DOCK_LABEL_FONT_SIZE { 13.f };
+
 // --- Icons and indicators --------------------------------------------------------------------
 
 #define DOCK_ICON_THEME "WhiteSur-light"

@@ -3,6 +3,10 @@
 #include <Surfaces/Dock.h>
 #include <CZ/Marco/MScreen.h>
 #include <CZ/Marco/Extensions/MForeignToplevel.h>
+#include <CZ/XDG/XDGDesktopEntry.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +27,7 @@ Shelf::Shelf() noexcept
         return;
 
     xdgkit = XDGKit::Make();
+    settings.load();
     assets.init();
     initWindows();
 
@@ -81,6 +86,9 @@ void Shelf::initWindows() noexcept
 
     for (MForeignToplevel *w : manager.toplevels())
         addWindow(w);
+
+    // Build the model even with no windows yet, so pinned apps show at startup.
+    updateModel();
 }
 
 void Shelf::addWindow(MForeignToplevel *window) noexcept
@@ -116,18 +124,91 @@ void Shelf::updateModel() noexcept
             std::find(m_minimized.begin(), m_minimized.end(), w) == m_minimized.end())
             m_minimized.push_back(w);
 
-    // Apps keep the order their first window appeared in.
+    // Pinned apps first (even if not running), then the running ones in the order their first
+    // window appeared.
     m_apps.clear();
+
+    for (const auto &id : settings.pinnedApps)
+        m_apps.push_back({ id, true, {} });
 
     for (MForeignToplevel *w : m_windows)
     {
         auto app { std::find_if(m_apps.begin(), m_apps.end(), [w](const App &a){ return a.appId == w->props().appId; }) };
 
         if (app == m_apps.end())
-            m_apps.push_back({ w->props().appId, { w } });
+            m_apps.push_back({ w->props().appId, false, { w } });
         else
             app->windows.push_back(w);
     }
 
     onWindowsChanged.notify();
+}
+
+/* --------------------------------- Pinned apps / launching --------------------------------- */
+
+std::string Shelf::appName(const std::string &appId) const noexcept
+{
+    auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
+    return entry && !entry->name.empty() ? entry->name : appId;
+}
+
+bool Shelf::isPinned(const std::string &appId) const noexcept
+{
+    return std::find(settings.pinnedApps.begin(), settings.pinnedApps.end(), appId) != settings.pinnedApps.end();
+}
+
+void Shelf::setPinned(const std::string &appId, bool pinned) noexcept
+{
+    if (appId.empty() || isPinned(appId) == pinned)
+        return;
+
+    if (pinned)
+        settings.pinnedApps.push_back(appId);
+    else
+        std::erase(settings.pinnedApps, appId);
+
+    Log(CZInfo, CZLN, "{} {}", pinned ? "Pinned" : "Unpinned", appId);
+    settings.save();
+    updateModel();
+}
+
+bool Shelf::launch(const std::string &appId) noexcept
+{
+    auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
+
+    if (!entry || entry->exec.empty())
+    {
+        Log(CZWarning, CZLN, "Can't launch {}: no desktop entry with an Exec key", appId);
+        return false;
+    }
+
+    return entry->launch();
+}
+
+bool Shelf::Spawn(const std::vector<std::string> &args) noexcept
+{
+    if (args.empty())
+        return false;
+
+    std::vector<char*> argv;
+    for (const auto &a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    const pid_t child { fork() };
+
+    if (child < 0)
+        return false;
+
+    if (child == 0)
+    {
+        // Double fork so the process is reparented to init and never becomes our zombie.
+        setsid();
+        if (fork() != 0) _exit(0);
+        syscall(SYS_close_range, 3, ~0U, 0);
+        execvp(argv[0], argv.data());
+        _exit(127);
+    }
+
+    waitpid(child, nullptr, 0);
+    return true;
 }
