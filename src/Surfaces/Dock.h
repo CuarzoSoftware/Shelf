@@ -7,6 +7,8 @@
 #include <Nodes/DockDivider.h>
 #include <Nodes/DockItem.h>
 #include <Surfaces/LaunchBounce.h>
+#include <Surfaces/DropCatcher.h>
+#include <Surfaces/DropFly.h>
 #include <CZ/Marco/Roles/MLayerSurface.h>
 #include <CZ/Marco/Roles/MTooltip.h>
 #include <CZ/Marco/Roles/MDND.h>
@@ -86,6 +88,13 @@ public:
     /// An app is being dragged to a new place.
     bool reordering() const noexcept { return m_dragItem != nullptr; }
 
+    /// Shows / hides the screen-wide drop catcher (see DropCatcher), while any dock's app is dragged.
+    void setCatcherMapped(bool mapped) noexcept;
+
+    /// The drag over / dropped on this dock's catcher (@p screenPos in screen coordinates).
+    void catcherDragOver(MDNDOffer &offer, const SkPoint &screenPos) noexcept;
+    void catcherDropped(MDNDOffer &offer, const SkPoint &screenPos) noexcept;
+
     /// Menu building helpers (only valid inside a MenuBuilder).
     MMenuAction &addMenuAction(const std::string &text, std::function<void()> onClicked, bool enabled = true) noexcept;
     void addMenuDivider() noexcept;
@@ -120,6 +129,9 @@ private:
     void dropped(MDNDOffer &offer, const SkPoint &pos) noexcept;
     void moveDraggedItemTo(size_t index) noexcept;
     void endDrag() noexcept;
+
+    /// Top-left corner of this surface on its screen (it's centered at the bottom).
+    SkPoint screenOrigin() const noexcept;
     bool overTrash(MDNDOffer &offer, const SkPoint &pos) const noexcept;
     void setTrashTarget(bool target) noexcept;
     void dndLeft() noexcept;
@@ -154,6 +166,14 @@ private:
     size_t m_dragStartIndex { 0 };
     bool m_droppedOnDock { false };
     bool m_rebuildPending { false };
+
+    // Covers the screen while an app is dragged (the drop is taken anywhere), and the app flying back
+    // to its slot after a drop away from the dock.
+    std::unique_ptr<DropCatcher> m_catcher;
+    std::unique_ptr<DropFly> m_fly;
+    void startFly(const SkPoint &local) noexcept;
+    SkPoint m_lastDragPos {};     // Latest pointer position seen during the drag (surface coordinates)
+    bool m_lastDragPosValid { false };
 
     // Launch feedback, by app id.
     std::unordered_map<std::string, std::unique_ptr<LaunchBounce>> m_bounces;

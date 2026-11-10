@@ -57,8 +57,8 @@ struct DockMetrics
 
         DockMetrics m {};
         m.tile          = tile;
-        m.paddingTop    = scaled(7);
-        m.paddingBottom = scaled(6);
+        m.paddingTop    = scaled(5);
+        m.paddingBottom = scaled(8);
         m.paddingSide   = scaled(6);
         m.spacing       = scaled(6);
         m.height        = m.paddingTop + tile + m.paddingBottom;
@@ -104,7 +104,7 @@ constexpr Float64 DOCK_EASE[4]          { 0.42, 0.0, 0.58, 1.0 };
 // Grace period after leaving an item before its label hides, so moving across the gap between two
 // items switches labels instead of hiding and showing them.
 constexpr UInt32 DOCK_LABEL_HIDE_DELAY_MS { 120 };
-constexpr SkScalar DOCK_LABEL_FONT_SIZE { 13.f };
+constexpr SkScalar DOCK_LABEL_FONT_SIZE { 14.f };
 
 // --- Minimize ---------------------------------------------------------------------------------
 
@@ -119,6 +119,8 @@ constexpr SkScalar DOCK_DRAG_THRESHOLD  { 4.f };
 // Icons sliding aside to make room for the dragged one.
 constexpr UInt32   DOCK_REORDER_MS      { 220 };
 // Private MIME type of dragged dock apps (the data is the app id).
+constexpr UInt32 DOCK_DROP_FLY_MS { 320 };     // An app dropped away from the dock flying back to its slot
+constexpr UInt32 DOCK_DROP_FLY_HOLD_MS { 80 }; // Crystals holds the drag icon this long after a dock drop (its Seat/DND.cpp)
 #define DOCK_APP_MIME_TYPE "application/x-cz-shelf-app"
 
 // --- Launch bounce ---------------------------------------------------------------------------
@@ -136,7 +138,7 @@ constexpr UInt32   DOCK_BOUNCE_TIMEOUT_MS { 10000 };
 
 // Icons are loaded once at this size (px) so they stay sharp up to DOCK_TILE_SIZE_MAX at 2x.
 constexpr Int32 DOCK_ICON_LOAD_SIZE     { 256 };
-constexpr SkScalar DOCK_ITEM_DARKEN     { 0.6f };  // Color factor of a pressed item / drop target
+constexpr SkScalar DOCK_ITEM_DARKEN     { 0.9f };  // Color factor of a pressed item / drop target
 constexpr SkColor  DOCK_ICON_SHADOW_COLOR    { 0x38000000 }; // Faint shadow following each icon's shape
 constexpr SkScalar DOCK_ICON_SHADOW_RADIUS   { 6.f };
 constexpr Int32    DOCK_ICON_SHADOW_OFFSET_Y { 1 };

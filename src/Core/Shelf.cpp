@@ -223,6 +223,18 @@ void Shelf::openDeskWindow() noexcept
     }
 }
 
+void Shelf::setAppDragging(bool dragging) noexcept
+{
+    if (m_appDragging == dragging)
+        return;
+
+    m_appDragging = dragging;
+
+    for (MScreen *s : marco->screens())
+        if (auto *dock { static_cast<Dock*>(s->userData) })
+            dock->setCatcherMapped(dragging);
+}
+
 /* ------------------------------------------ Trash ------------------------------------------ */
 
 void Shelf::initTrashWatch() noexcept

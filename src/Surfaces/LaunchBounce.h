@@ -2,6 +2,7 @@
 #define LAUNCHBOUNCE_H
 
 #include <Core/Types.h>
+#include <Nodes/DockIcon.h>
 #include <CZ/Marco/Roles/MSubsurface.h>
 #include <CZ/AK/Nodes/AKImageFrame.h>
 #include <CZ/Core/CZLinearAnimation.h>
@@ -39,11 +40,12 @@ private:
     void finish() noexcept;
 
     Dock &m_dock;
-    AKImageFrame m_icon { this };
+    DockIcon m_icon { nullptr, this };
     CZWeak<DockItem> m_item;
     CZLinearAnimation m_anim;
     SkScalar m_height { 0.f };     // current offset above the item
     bool m_stopping { false };
+    bool m_shown { false }; // The bouncing copy is on screen: the item's icon can be hidden
     bool m_finished { false };
     std::chrono::steady_clock::time_point m_start;
 };

@@ -53,6 +53,17 @@ public:
     /// Generic window icon (minimized windows).
     std::shared_ptr<RImage> windowIcon() noexcept;
 
+    /**
+     * @brief @p icon with its drop shadow, pre-rendered (cached per icon and screen scale).
+     *
+     * Rendered at the largest tile size and drawn scaled down: the icon fills the middle, with a
+     * ShadowMargin() border (fraction of the icon size) on every side for the shadow.
+     */
+    std::shared_ptr<RImage> shadowedIcon(const std::shared_ptr<RImage> &icon) noexcept;
+
+    /// The shadow border of shadowedIcon(), as a fraction of the icon size.
+    static float ShadowMargin() noexcept;
+
     /// The Desk tile's icon (the file manager's, like Finder's).
     std::shared_ptr<RImage> deskIcon() noexcept;
 
@@ -72,6 +83,15 @@ private:
     RDRMFormat m_format { 0, {} };
     std::unordered_map<std::string, std::shared_ptr<RImage>> m_icons;    // by icon name
     std::unordered_map<std::string, std::shared_ptr<RImage>> m_appIcons; // by app id
+
+    struct Shadowed
+    {
+        std::weak_ptr<RImage> icon;
+        Int32 scale;
+        std::shared_ptr<RImage> image;
+    };
+
+    std::unordered_map<const RImage*, Shadowed> m_shadowed;
 };
 
 #endif // ASSETS_H

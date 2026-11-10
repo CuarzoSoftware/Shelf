@@ -84,6 +84,10 @@ public:
     /// Asks Desk to open a file manager window (the Desk tile's click).
     void openDeskWindow() noexcept;
 
+    /// An app is being dragged out of a dock: every screen catches the drop (see DropCatcher).
+    void setAppDragging(bool dragging) noexcept;
+    bool appDragging() const noexcept { return m_appDragging; }
+
     /// Whether the home trash has files (the trash tile shows the full icon).
     bool trashFull() const noexcept { return m_trashFull; }
 
@@ -120,6 +124,7 @@ private:
     std::vector<MForeignToplevel*> m_minimized;
     bool m_deskRunning { false };
     bool m_trashFull { false };
+    bool m_appDragging { false };
     Int32 m_inotify { -1 }, m_trashWatch { -1 }, m_trashFilesWatch { -1 };
     std::shared_ptr<CZEventSource> m_inotifySource;
     std::vector<std::shared_ptr<CZEventSource>> m_dropReaders; // Dropped uri-lists being read

@@ -61,11 +61,9 @@ Dock::Dock(MScreen &screen) noexcept :
     {
         label = std::make_unique<HoverLabel>();
 
-        // Once a label is on screen, drop the other (previous item's) one.
-        label->tooltip.onMappedChanged.subscribe(this, [this, l = label.get()]{
-            if (!l->tooltip.mapped())
-                return;
-
+        // Once a label is about to be on screen (its first frame is committed), drop the other
+        // (previous item's) one: never a frame without either.
+        label->tooltip.onWillMap.subscribe(this, [this, l = label.get()]{
             for (auto &other : m_labels)
                 if (other.get() != l)
                     other->tooltip.setMapped(false);
@@ -108,6 +106,8 @@ Dock::Dock(MScreen &screen) noexcept :
     rebuildItems();
     applyMetrics();
     updateExclusiveZone();
+
+    m_catcher = std::make_unique<DropCatcher>(*this, screen);
 
     // Pointer enter/leave/motion over the whole surface (i.e. its input region).
     scene().installEventFilter(this);
@@ -262,6 +262,10 @@ void Dock::rebuildItems() noexcept
             openMenu(*raw, e, [this, appId](Dock &){ buildAppMenu(appId); });
         };
         item->setMetrics(m_metrics);
+
+        // An app flying back to its slot (dropped away from the dock) lands on the new item.
+        if (m_fly && m_fly->appId() == app.appId)
+            m_fly->setItem(item.get());
 
         // Keep bouncing over the new item; land once the app shows a window.
         if (auto bounce { m_bounces.find(app.appId) }; bounce != m_bounces.end())
@@ -418,7 +422,8 @@ void Dock::dividerDragEnded(bool resized) noexcept
         GetShelf()->setTileSize(m_metrics.tile);
 
     // The pointer may have been released outside the dock: hide now that the drag is over.
-    if (m_autoHide && !m_pointerInside)
+    // An auto-hiding dock stays up until the app lands (the flight is drawn relative to it).
+    if (m_autoHide && !m_pointerInside && !m_fly)
         hide();
 }
 
@@ -477,7 +482,7 @@ bool Dock::eventFilter(const CZEvent &event, CZObject &target) noexcept
 
         // Don't hide in the middle of a resize drag (see dividerDragEnded()), while a context
         // menu is open (see menuClosed()) or while an app is being dragged (see endDrag()).
-        if (m_autoHide && !divider.dragging() && !menuOpen() && !reordering())
+        if (m_autoHide && !divider.dragging() && !menuOpen() && !reordering() && !m_fly)
             hide();
         break;
     default:
@@ -578,6 +583,15 @@ void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
         m_dndIcon->layout().setWidthPercent(100.f);
         m_dndIcon->layout().setHeightPercent(100.f);
         m_dnd->onFinished.subscribe(this, [this]{ endDrag(); });
+
+        // Once the drag icon is about to be on screen: hide the item's icon (its slot stays, empty)
+        // and the hover label, so there's never a frame without the icon.
+        m_dnd->onWillMap.subscribe(this, [this]{
+            hideLabels();
+
+            if (m_dragItem && !(m_fly && m_fly->appId() == m_dragAppId))
+                m_dragItem->icon.setIconOpacity(0.f);
+        });
         m_dnd->onCancelled.subscribe(this, [this]{ endDrag(); });
 
         // Other clients (e.g. file managers) get the desktop file. The dock itself doesn't need the
@@ -597,7 +611,6 @@ void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
     }
 
     const std::string &appId { item.appId };
-    hideLabels();
 
     // The icon under the pointer exactly where it was grabbed.
     m_dndIcon->setImage(GetShelf()->assets.appIcon(appId));
@@ -622,9 +635,10 @@ void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
     m_dragItem.reset(&item);
     m_dragStartIndex = size_t(it - m_appItems.begin());
     m_droppedOnDock = false;
+    GetShelf()->setAppDragging(true);
 
-    // Its slot stays (empty) where it would be dropped.
-    item.icon.setIconOpacity(0.f);
+    // Its slot stays (empty) where it would be dropped: the icon is hidden once the drag icon shows
+    // (see the onWillMap handler above).
 }
 
 bool Dock::overTrash(MDNDOffer &offer, const SkPoint &pos) const noexcept
@@ -674,6 +688,8 @@ void Dock::dragOver(MDNDOffer &offer, const SkPoint &pos) noexcept
 
     offer.accept(DOCK_APP_MIME_TYPE);
     offer.setActions(MDNDOffer::Move, MDNDOffer::Move);
+    m_lastDragPos = pos;
+    m_lastDragPosValid = true;
 
     // The slot under the pointer (all app slots are the same size).
     const DockMetrics &m { m_metrics };
@@ -745,33 +761,128 @@ void Dock::moveDraggedItemTo(size_t index) noexcept
             i->slideFrom(before[i.get()] - i->layout().calculatedLeft());
 }
 
+SkPoint Dock::screenOrigin() const noexcept
+{
+    // Anchored to the bottom edge only: horizontally centered, `margin().bottom` above the edge.
+    const SkISize screen { m_catcher ? m_catcher->screenSize() : SkISize::MakeEmpty() };
+    const SkISize size { surfaceSize() };
+    return SkPoint::Make((screen.width() - size.width()) * 0.5f,
+                         SkScalar(screen.height() - margin().fBottom - size.height()));
+}
+
+void Dock::setCatcherMapped(bool mapped) noexcept
+{
+    if (m_catcher)
+        m_catcher->setMapped(mapped);
+}
+
+void Dock::catcherDragOver(MDNDOffer &offer, const SkPoint &screenPos) noexcept
+{
+    // Only the dock's own app drags: taken anywhere on the screen.
+    if (!GetShelf()->appDragging() || !offer.hasMimeType(DOCK_APP_MIME_TYPE))
+    {
+        offer.accept("");
+        return;
+    }
+
+    offer.accept(DOCK_APP_MIME_TYPE);
+    offer.setActions(MDNDOffer::Move, MDNDOffer::Move);
+
+    // Over this dock (of the app being dragged): reorder as if the dock got the motion itself.
+    if (!reordering())
+        return;
+
+    const SkPoint origin { screenOrigin() };
+    const SkPoint local { screenPos.x() - origin.x(), screenPos.y() - origin.y() };
+    m_lastDragPos = local;
+    m_lastDragPosValid = true;
+
+    if (SkRect::Make(worldRect()).contains(local.x(), local.y()))
+        dragOver(offer, local);
+}
+
+void Dock::startFly(const SkPoint &local) noexcept
+{
+    // The icon as it was under the pointer (the drag icon's hotspot) flies to the item's slot. The
+    // item stays hidden until it lands.
+    const SkIPoint hotspot { m_dnd ? m_dnd->hotspot() : SkIPoint::Make(m_metrics.tile / 2, m_metrics.tile / 2) };
+    const SkIRect from { SkIRect::MakeXYWH(Int32(local.x()) - hotspot.x(), Int32(local.y()) - hotspot.y(), m_metrics.tile, m_metrics.tile) };
+
+    m_fly = std::make_unique<DropFly>(*this, GetShelf()->assets.appIcon(m_dragAppId), m_dragAppId, from);
+    m_fly->setItem(m_dragItem.get());
+    m_fly->onFinished = [this]{
+        m_fly.reset();
+
+        // Kept up while it flew (see endDrag()).
+        if (m_autoHide && !m_pointerInside && !reordering())
+            hide();
+    };
+}
+
+void Dock::catcherDropped(MDNDOffer &offer, const SkPoint &screenPos) noexcept
+{
+    if (!GetShelf()->appDragging() || !offer.hasMimeType(DOCK_APP_MIME_TYPE))
+        return;
+
+    if (reordering())
+    {
+        // Over the dock: its final slot. Then the icon flies from where it was released to it.
+        const SkPoint origin { screenOrigin() };
+        const SkPoint local { screenPos.x() - origin.x(), screenPos.y() - origin.y() };
+
+        if (SkRect::Make(worldRect()).contains(local.x(), local.y()))
+            dragOver(offer, local);
+
+        startFly(local);
+        m_droppedOnDock = true;
+    }
+    else
+    {
+        // Dropped on another screen: the app keeps its new slot (no flight across screens).
+        for (MScreen *s : GetShelf()->marco->screens())
+            if (auto *dock { static_cast<Dock*>(s->userData) }; dock && dock->reordering())
+                dock->m_droppedOnDock = true;
+    }
+
+    // Complete the session (the data itself isn't needed, see onSend).
+    if (const Int32 fd { offer.receive(DOCK_APP_MIME_TYPE) }; fd >= 0)
+        close(fd);
+
+    offer.finish();
+}
+
 void Dock::endDrag() noexcept
 {
     if (!reordering())
         return;
 
     DockItem *item { m_dragItem.get() };
-    const bool dropped { m_droppedOnDock };
 
-    if (!dropped)
-        moveDraggedItemTo(m_dragStartIndex); // Rejected or dropped elsewhere: back to its place
+    // Wherever it's released (or if the drag gets cancelled), the app keeps the last slot opened
+    // for it, like on macOS. Not caught by the drop catcher (e.g. released before it showed up):
+    // fly from the last known pointer position.
+    if (!m_droppedOnDock && !m_fly)
+        startFly(m_lastDragPosValid ? m_lastDragPos : SkPoint::Make(SkRect::Make(item->icon.worldRect()).centerX(), SkRect::Make(item->icon.worldRect()).centerY()));
 
-    item->icon.setIconOpacity(1.f);
+    m_lastDragPosValid = false;
+
+    // Still hidden while it flies back from where it was dropped (DropFly shows it when it lands).
+    if (!m_fly || m_fly->appId() != m_dragAppId)
+        item->icon.setIconOpacity(1.f);
+
     m_dragItem.reset();
     m_droppedOnDock = false;
+    GetShelf()->setAppDragging(false);
 
-    if (dropped)
-    {
-        // The new order sticks: the pinned apps in dock order, including the dragged one (dropping a
-        // running app in place keeps it in the dock, like macOS).
-        std::vector<std::string> pinned;
+    // The new order sticks: the pinned apps in dock order, including the dragged one (dropping a
+    // running app in place keeps it in the dock, like macOS).
+    std::vector<std::string> pinned;
 
-        for (const auto &i : m_appItems)
-            if (i->appId == m_dragAppId || GetShelf()->isPinned(i->appId))
-                pinned.emplace_back(i->appId);
+    for (const auto &i : m_appItems)
+        if (i->appId == m_dragAppId || GetShelf()->isPinned(i->appId))
+            pinned.emplace_back(i->appId);
 
-        GetShelf()->setPinnedApps(pinned);
-    }
+    GetShelf()->setPinnedApps(pinned);
 
     if (m_rebuildPending)
     {
@@ -779,7 +890,8 @@ void Dock::endDrag() noexcept
         rebuildItems();
     }
 
-    if (!dropped && m_autoHide && !m_pointerInside)
+    // An auto-hiding dock stays up until the app lands (the flight is drawn relative to it).
+    if (m_autoHide && !m_pointerInside && !m_fly)
         hide();
 }
 
@@ -802,6 +914,10 @@ void Dock::launchApp(const std::string &appId) noexcept
     bounce->setItem(item);
     bounce->onFinished = [this, appId]{ m_bounces.erase(appId); };
     m_bounces[appId] = std::move(bounce);
+
+    // Its label (shown since the pointer is over it) goes away while it bounces.
+    if (const HoverLabel *label { m_labels[m_activeLabel].get() }; label->item == item)
+        hideLabels();
 }
 
 /* --------------------------------------- Hover labels --------------------------------------- */
@@ -876,6 +992,10 @@ void Dock::showLabel(DockItem &item) noexcept
     if (menuOpen() || m_progress < 1.0 || m_slide.isRunning() || !item.label)
         return;
 
+    // Nor over an app bouncing while it launches.
+    if (!item.appId.empty() && m_bounces.contains(item.appId))
+        return hideLabels();
+
     HoverLabel *current { m_labels[m_activeLabel].get() };
 
     if (current->item == &item && current->tooltip.mapped())
@@ -920,10 +1040,13 @@ void Dock::openMenu(AKNode &item, const CZPointerButtonEvent &event, const MenuB
     {
         m_menu = std::make_unique<MTooltip>();
         m_menu->onMappedChanged.subscribe(this, [this]{ if (!m_menu->mapped()) menuClosed(); });
+
+        // The hover label goes away once the menu is about to be on screen (no frame without
+        // either). No new labels show while it's open (see showLabel()).
+        m_menu->onWillMap.subscribe(this, [this]{ hideLabels(); });
     }
 
     m_menu->setMapped(false);
-    hideLabels(); // No hover labels while a menu is open (see showLabel())
 
     // Rebuild the rows (safe here: no row handler is running).
     m_menuItems.clear();

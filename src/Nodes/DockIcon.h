@@ -2,31 +2,35 @@
 #define DOCKICON_H
 
 #include <Core/Types.h>
-#include <CZ/AK/Nodes/AKBakeable.h>
-#include <CZ/AK/Effects/AKBackgroundImageShadowEffect.h>
+#include <CZ/AK/Nodes/AKContainer.h>
+#include <CZ/AK/Nodes/AKImageFrame.h>
 #include <memory>
 
 /**
- * @brief A dock tile's icon, scaled to fit the node, with a faint drop shadow following its shape.
+ * @brief A dock tile's icon with a faint drop shadow following its shape.
  *
- * Baked (rather than an AKImageFrame) because the shadow effect is generated from the baked image.
- * Use setIconOpacity() to fade it: it fades the shadow too (the effect is a separate node).
+ * The icon and its shadow are pre-rendered together into one image (Assets::shadowedIcon(), cached
+ * per icon) shown by a plain image frame: no live shadow effect to recompute when repainting. The
+ * frame extends past the node by the shadow's margin, as a percentage of the node, so it follows
+ * the tile size (resizing the dock, items growing/shrinking).
  */
-class DockIcon final : public AKBakeable
+class DockIcon final : public AKContainer
 {
 public:
     DockIcon(std::shared_ptr<RImage> image = nullptr, AKNode *parent = nullptr) noexcept;
 
     void setImage(std::shared_ptr<RImage> image) noexcept;
+
+    /// The icon itself (without the shadow).
     std::shared_ptr<RImage> image() const noexcept { return m_image; }
 
     /// Opacity of the icon and its shadow.
-    void setIconOpacity(SkScalar opacity) noexcept;
+    void setIconOpacity(SkScalar opacity) noexcept { frame.setOpacity(opacity); }
 
-    AKBackgroundImageShadowEffect shadow { DOCK_ICON_SHADOW_RADIUS, { 0, DOCK_ICON_SHADOW_OFFSET_Y }, DOCK_ICON_SHADOW_COLOR, this };
+    /// Multiplies the colors (e.g. darkening a pressed item).
+    void setColorFactor(const SkColor4f &factor) noexcept { frame.setColorFactor(factor); }
 
-protected:
-    void bakeEvent(const AKBakeEvent &event) override;
+    AKImageFrame frame { this };
 
 private:
     std::shared_ptr<RImage> m_image;

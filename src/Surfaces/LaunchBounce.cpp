@@ -37,6 +37,15 @@ LaunchBounce::LaunchBounce(Dock &dock, std::shared_ptr<RImage> icon) noexcept :
     m_icon.layout().setWidthPercent(100.f);
     m_icon.layout().setHeightPercent(100.f);
 
+    // The item's icon is hidden only once the copy is about to be on screen (never a frame without
+    // either).
+    onWillMap.subscribe(this, [this]{
+        m_shown = true;
+
+        if (m_item && !m_finished)
+            m_item->icon.setIconOpacity(0.f);
+    });
+
     m_start = std::chrono::steady_clock::now();
     m_anim.start();
 }
@@ -54,7 +63,7 @@ void LaunchBounce::setItem(DockItem *item) noexcept
     m_item.reset(item);
 
     if (m_item)
-        m_item->icon.setIconOpacity(m_finished ? 1.f : 0.f);
+        m_item->icon.setIconOpacity(m_shown && !m_finished ? 0.f : 1.f);
 
     updatePosition();
 }

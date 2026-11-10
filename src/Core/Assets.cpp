@@ -7,6 +7,8 @@
 #include <CZ/skia/core/SkRRect.h>
 #include <CZ/skia/effects/SkImageFilters.h>
 #include <Core/Shelf.h>
+#include <CZ/Marco/MScreen.h>
+#include <cmath>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/XDG/XDGKit.h>
@@ -115,6 +117,65 @@ std::shared_ptr<RImage> Assets::windowIcon() noexcept
 std::shared_ptr<RImage> Assets::deskIcon() noexcept
 {
     return themedIcon({ "system-file-manager", "org.gnome.Nautilus", "file-manager", "user-home" });
+}
+
+float Assets::ShadowMargin() noexcept
+{
+    // The shadow keeps the proportions it has at the default tile size.
+    return DOCK_ICON_SHADOW_RADIUS / SkScalar(DOCK_TILE_SIZE_DEFAULT);
+}
+
+std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon) noexcept
+{
+    if (!icon)
+        return {};
+
+    // The largest screen scale (sharp everywhere).
+    Int32 scale { 1 };
+    for (MScreen *s : GetShelf()->marco->screens())
+        scale = std::max(scale, s->props().scale);
+
+    if (auto it { m_shadowed.find(icon.get()) }; it != m_shadowed.end() && !it->second.icon.expired() && it->second.scale == scale)
+        return it->second.image;
+
+    std::erase_if(m_shadowed, [](const auto &pair){ return pair.second.icon.expired(); });
+
+    auto source { icon->skImage() };
+
+    if (!source)
+        return icon;
+
+    // In logical units of the largest tile size (the surface applies the scale).
+    const SkScalar size { SkScalar(DOCK_TILE_SIZE_MAX) };
+    const SkScalar margin { std::ceil(size * ShadowMargin()) };
+    const SkScalar ratio { size / SkScalar(DOCK_TILE_SIZE_DEFAULT) };
+    const SkScalar sigma { DOCK_ICON_SHADOW_RADIUS * ratio / 3.f };
+    const SkScalar dy { DOCK_ICON_SHADOW_OFFSET_Y * ratio };
+
+    auto surface { RSurface::Make(SkISize::Make(Int32(size + 2 * margin), Int32(size + 2 * margin)), scale, true) };
+
+    if (!surface)
+        return icon;
+
+    {
+        auto pass { surface->beginPass(RPassCap_SkCanvas) };
+        SkCanvas *c { pass->getCanvas() };
+        c->clear(SK_ColorTRANSPARENT);
+
+        const SkScalar s { std::min(size / source->width(), size / source->height()) };
+        const SkRect dst { SkRect::MakeXYWH(margin + (size - source->width() * s) / 2.f, margin + (size - source->height() * s) / 2.f,
+                                            source->width() * s, source->height() * s) };
+
+        SkPaint paint;
+        paint.setAntiAlias(true);
+        paint.setImageFilter(SkImageFilters::DropShadow(0.f, dy, sigma, sigma, DOCK_ICON_SHADOW_COLOR, nullptr));
+        c->drawImageRect(source, SkRect::MakeIWH(source->width(), source->height()), dst,
+                         SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kLinear), &paint, SkCanvas::kFast_SrcRectConstraint);
+    }
+
+    auto image { surface->image() };
+    m_shadowed[icon.get()] = { icon, scale, image };
+    return image;
 }
 
 std::shared_ptr<RImage> Assets::trashIcon(bool full) noexcept
