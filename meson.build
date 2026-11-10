@@ -1,0 +1,31 @@
+project(
+    'cz-shelf',
+    'c', 'cpp',
+    version : '0.1.0',
+    meson_version: '>= 0.60.0',
+    default_options: [
+        'warning_level=2',
+        'cpp_std=c++20',
+    ]
+)
+
+cz_core_dep         = dependency('cz-core', fallback:['cz-core', 'cz_core_dep'])
+cz_skia_dep         = dependency('cz-skia', fallback:['cz-skia', 'cz_skia_dep'], include_type: 'system')
+cz_ream_dep         = dependency('cz-ream', fallback:['cz-ream', 'cz_ream_dep'])
+cz_kay_dep          = dependency('cz-kay', fallback:['cz-kay', 'cz_kay_dep'])
+cz_marco_dep        = dependency('cz-marco', fallback:['cz-marco', 'cz_marco_dep'])
+cz_xdgkit_dep       = dependency('cz-xdgkit', fallback:['cz-xdgkit', 'cz_xdgkit_dep'])
+
+executable(
+    'cz-shelf',
+    sources : run_command('find', './src', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n'),
+    include_directories: ['./src'],
+    dependencies : [
+        cz_core_dep,
+        cz_skia_dep,
+        cz_ream_dep,
+        cz_kay_dep,
+        cz_marco_dep,
+        cz_xdgkit_dep
+    ],
+    install : true)

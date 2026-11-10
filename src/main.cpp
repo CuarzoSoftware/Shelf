@@ -1,25 +1,11 @@
-#include <QSocketNotifier>
-#include <QApplication>
-#include <core/Shelf.h>
+#include <Core/Shelf.h>
 
-int main(int argc, char **argv)
+int main()
 {
-    QApplication app { argc, argv };
+    Shelf shelf;
 
-    const int fd { Shelf::fd() };
+    if (!shelf.marco)
+        return 1;
 
-    if (fd < 0)
-        return EXIT_FAILURE;
-
-    QSocketNotifier sockRead { fd, QSocketNotifier::Read  };
-
-    QObject::connect(&sockRead, &QSocketNotifier::activated, []() {
-
-        Shelf::dispatch();
-        Shelf::flush();
-    });
-
-    sockRead.setEnabled(true);
-
-    return app.exec();
+    return shelf.marco->run();
 }
