@@ -126,6 +126,7 @@ const Assets::DockFrame &Assets::dockFrame(Int32 scale, CZColorScheme scheme, In
         return it->second;
 
     // Narrowest dock whose middle column is past both rounded corners and their shadow falloff.
+    // (Also the dock's minimum width, see DockMetrics::minWidth.)
     const Int32 width { 2 * (radius + DOCK_SHADOW_EXTENT) + 1 };
     const SkISize size { margins.fLeft + width + margins.fRight, margins.fTop + height + margins.fBottom };
 

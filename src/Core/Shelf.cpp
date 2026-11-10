@@ -55,9 +55,8 @@ void Shelf::onScreenPlugged(MScreen &screen) noexcept
     Log(CZInfo, CZLN, "Screen plugged: {}", screen.props().name);
     auto *dock { new Dock(screen) }; // Sets screen.userData
 
-    // No settings yet: CZ_SHELF_AUTOHIDE=0 keeps the dock shown.
-    if (const char *env { getenv("CZ_SHELF_AUTOHIDE") }; env && strcmp(env, "0") == 0)
-        dock->setAutoHide(false);
+    dock->setTileSize(settings.tileSize);
+    dock->setAutoHide(autoHide());
 }
 
 void Shelf::onScreenUnplugged(MScreen &screen) noexcept
@@ -150,6 +149,43 @@ std::string Shelf::appName(const std::string &appId) const noexcept
 {
     auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
     return entry && !entry->name.empty() ? entry->name : appId;
+}
+
+bool Shelf::autoHide() const noexcept
+{
+    // CZ_SHELF_AUTOHIDE=0 keeps the dock shown regardless of the settings.
+    if (const char *env { getenv("CZ_SHELF_AUTOHIDE") }; env && strcmp(env, "0") == 0)
+        return false;
+
+    return settings.autoHide;
+}
+
+void Shelf::setAutoHide(bool enabled) noexcept
+{
+    if (settings.autoHide != enabled)
+    {
+        settings.autoHide = enabled;
+        settings.save();
+    }
+
+    for (MScreen *s : marco->screens())
+        if (auto *dock { static_cast<Dock*>(s->userData) })
+            dock->setAutoHide(autoHide());
+}
+
+void Shelf::setTileSize(Int32 tile) noexcept
+{
+    tile = DockMetrics::Make(tile).tile;
+
+    if (settings.tileSize != tile)
+    {
+        settings.tileSize = tile;
+        settings.save();
+    }
+
+    for (MScreen *s : marco->screens())
+        if (auto *dock { static_cast<Dock*>(s->userData) })
+            dock->setTileSize(tile);
 }
 
 bool Shelf::isPinned(const std::string &appId) const noexcept

@@ -22,6 +22,16 @@ constexpr Int32 DOCK_TILE_SIZE_DEFAULT  { 48 };  // `tilesize` default
 constexpr Int32 DOCK_TILE_SIZE_MIN      { 16 };  // Same range as the macOS Dock size slider
 constexpr Int32 DOCK_TILE_SIZE_MAX      { 128 };
 constexpr Int32 DOCK_SCREEN_GAP         { 4 };   // floating gap between the dock and the screen edge
+constexpr Int32 DOCK_SCREEN_SIDE_MARGIN { 8 };   // min space left on each side when the dock fills the screen width
+
+// --- Shadow ----------------------------------------------------------------------------------
+
+constexpr Int32   DOCK_SHADOW_BLUR      { 20 };  // CSS-like blur radius (sigma = blur / 2)
+constexpr Int32   DOCK_SHADOW_OFFSET_Y  { 4 };
+constexpr SkColor DOCK_SHADOW_COLOR     { 0x40000000 };
+
+// Distance the blurred shadow extends past the dock rect (~3 sigma).
+constexpr Int32   DOCK_SHADOW_EXTENT    { (DOCK_SHADOW_BLUR * 3) / 2 };
 
 /**
  * @brief Dock geometry for a tile (icon) size. Everything scales with it, keeping the proportions
@@ -38,6 +48,7 @@ struct DockMetrics
     Int32 radius;
     Int32 dividerSlot;      // width of the divider's (draggable) slot
     Int32 dividerHeight;    // length of the divider line
+    Int32 minWidth;         // see Make()
 
     static constexpr DockMetrics Make(Int32 tile) noexcept
     {
@@ -54,18 +65,12 @@ struct DockMetrics
         m.radius        = scaled(18);
         m.dividerSlot   = scaled(12);
         m.dividerHeight = scaled(36);
+        // Narrowest dock whose 9-patch frame doesn't overlap: both rounded corners and their
+        // shadow falloff, plus the stretched middle column.
+        m.minWidth      = 2 * (m.radius + DOCK_SHADOW_EXTENT) + 1;
         return m;
     }
 };
-
-// --- Shadow ----------------------------------------------------------------------------------
-
-constexpr Int32   DOCK_SHADOW_BLUR      { 20 };  // CSS-like blur radius (sigma = blur / 2)
-constexpr Int32   DOCK_SHADOW_OFFSET_Y  { 4 };
-constexpr SkColor DOCK_SHADOW_COLOR     { 0x40000000 };
-
-// Distance the blurred shadow extends past the dock rect (~3 sigma).
-constexpr Int32   DOCK_SHADOW_EXTENT    { (DOCK_SHADOW_BLUR * 3) / 2 };
 
 // --- Fill and hairline borders (light, dark) -------------------------------------------------
 
@@ -101,6 +106,21 @@ constexpr Float64 DOCK_EASE[4]          { 0.42, 0.0, 0.58, 1.0 };
 constexpr UInt32 DOCK_LABEL_HIDE_DELAY_MS { 120 };
 constexpr SkScalar DOCK_LABEL_FONT_SIZE { 13.f };
 
+// --- Minimize ---------------------------------------------------------------------------------
+
+// Minimized window items grow in (and shrink out when restored) while the compositor animates the
+// window into (out of) them. Matches cz-crystals' minimize animation.
+constexpr UInt32 DOCK_MINIMIZE_MS       { 420 };
+
+// --- Launch bounce ---------------------------------------------------------------------------
+
+// One bounce of the icon of an app being launched (up and back down).
+constexpr UInt32   DOCK_BOUNCE_MS         { 700 };
+// Peak height, relative to the tile size.
+constexpr SkScalar DOCK_BOUNCE_HEIGHT     { 0.6f };
+// Stop bouncing if the app hasn't shown a window by then.
+constexpr UInt32   DOCK_BOUNCE_TIMEOUT_MS { 10000 };
+
 // --- Icons and indicators --------------------------------------------------------------------
 
 #define DOCK_ICON_THEME "WhiteSur-light"
@@ -119,6 +139,7 @@ class DockBackground;
 class DockFrame;
 class DockDivider;
 class DockItem;
+class LaunchBounce;
 
 Shelf *GetShelf() noexcept;
 

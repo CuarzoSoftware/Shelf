@@ -2,11 +2,21 @@
 #include <CZ/AK/AKApp.h>
 #include <CZ/AK/AKScene.h>
 #include <CZ/Core/Events/CZPointerButtonEvent.h>
+#include <CZ/Core/CZEase.h>
 #include <CZ/Core/Events/CZPointerEnterEvent.h>
 #include <CZ/Core/Events/CZPointerLeaveEvent.h>
 
 DockItem::DockItem(std::shared_ptr<RImage> image, AKNode *parent) noexcept :
-    AKContainer(YGFlexDirectionColumn, false, parent)
+    AKContainer(YGFlexDirectionColumn, false, parent),
+    m_scaleAnim(DOCK_MINIMIZE_MS,
+        [this](CZAnimation *a) {
+            setItemScale(m_scaleFrom + (m_scaleTo - m_scaleFrom) * SkScalar(CZEase::InOutCubic(a->value())));
+        },
+        [this](CZAnimation *) {
+            setItemScale(m_scaleTo);
+            if (auto done { std::move(m_scaleDone) })
+                done();
+        })
 {
     SkRegion empty;
 
@@ -30,11 +40,40 @@ DockItem::DockItem(std::shared_ptr<RImage> image, AKNode *parent) noexcept :
 
 void DockItem::setMetrics(const DockMetrics &m) noexcept
 {
-    layout().setWidth(m.tile);
-    layout().setHeight(m.tile);
+    m_metrics = m;
+    applySize();
+}
+
+void DockItem::setItemScale(SkScalar scale) noexcept
+{
+    scale = std::clamp(scale, 0.f, 1.f);
+
+    if (scale == m_scale)
+        return;
+
+    m_scale = scale;
+    applySize();
+}
+
+void DockItem::animateItemScale(SkScalar target, std::function<void()> done) noexcept
+{
+    m_scaleAnim.pause();
+    m_scaleFrom = m_scale;
+    m_scaleTo = target;
+    m_scaleDone = std::move(done);
+    m_scaleAnim.setDuration(std::max<UInt32>(1, UInt32(DOCK_MINIMIZE_MS * std::fabs(m_scaleTo - m_scaleFrom))));
+    m_scaleAnim.reset();
+}
+
+void DockItem::applySize() noexcept
+{
+    const DockMetrics &m { m_metrics };
+    const SkScalar tile { m.tile * m_scale };
+    layout().setWidth(tile);
+    layout().setHeight(tile);
 
     // The badge covers ~45% of the tile, like the app icon on a minimized window in the macOS Dock.
-    const Int32 badgeSize { (m.tile * 45 + 50) / 100 };
+    const SkScalar badgeSize { tile * 0.45f };
     badge.layout().setWidth(badgeSize);
     badge.layout().setHeight(badgeSize);
 
@@ -66,6 +105,9 @@ void DockItem::updateIndicatorColor() noexcept
 void DockItem::pointerButtonEvent(const CZPointerButtonEvent &event)
 {
     AKContainer::pointerButtonEvent(event);
+
+    if (removing)
+        return;
 
     if (event.button == BTN_RIGHT && event.pressed)
     {

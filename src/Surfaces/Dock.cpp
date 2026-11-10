@@ -2,6 +2,7 @@
 #include <Nodes/DockFrame.h>
 #include <Core/Log.h>
 #include <Core/Shelf.h>
+#include <Surfaces/LaunchBounce.h>
 #include <CZ/Marco/Extensions/MForeignToplevel.h>
 #include <CZ/Marco/MScreen.h>
 #include <CZ/AK/AKScene.h>
@@ -35,6 +36,9 @@ Dock::Dock(MScreen &screen) noexcept :
     setColor(CZAdaptiveColor(0x00000000));
     layout().setWidthAuto();
     layout().setHeightAuto();
+    // Center the items when the dock is held at its minimum width (see applyMetrics()).
+    layout().setAlignItems(YGAlignCenter);
+    layout().setJustifyContent(YGJustifyCenter);
     setDecorations(std::make_unique<DockFrame>());
 
     background.layout().setPositionType(YGPositionTypeAbsolute);
@@ -71,6 +75,12 @@ Dock::Dock(MScreen &screen) noexcept :
         openMenu(*m_trash, e, [this](Dock &){ buildTrashMenu(); });
     };
 
+
+    // Resolution, scale or rotation changes.
+    screen.onPropsChanged.subscribe(this, [this](MScreen &, CZBitset<MScreen::Changes>){ fitToScreen(); });
+
+
+
     GetShelf()->onWindowsChanged.subscribe(this, [this]{ rebuildItems(); });
     rebuildItems();
     applyMetrics();
@@ -85,7 +95,49 @@ Dock::Dock(MScreen &screen) noexcept :
 
 void Dock::setTileSize(Int32 tile) noexcept
 {
-    const DockMetrics metrics { DockMetrics::Make(tile) };
+    m_preferredTile = DockMetrics::Make(tile).tile;
+    fitToScreen();
+}
+
+Int32 Dock::availableWidth() const noexcept
+{
+    MScreen *s { screen() };
+
+    if (!s)
+        return 0;
+
+    // Logical width of the current mode.
+    for (const auto &mode : s->props().modes)
+    {
+        if (!mode.isCurrent)
+            continue;
+
+        const Int32 px { CZ::Is90Transform(s->props().transform) ? mode.size.height() : mode.size.width() };
+        return px / std::max(1, s->props().scale) - 2 * DOCK_SCREEN_SIDE_MARGIN;
+    }
+
+    return 0; // Unknown yet: no limit
+}
+
+Int32 Dock::dockWidth(const DockMetrics &m) const noexcept
+{
+    // Mirrors the layout: [padding][apps][gap][divider][gap][minimized windows + trash][padding]
+    const auto row { [&m](Int32 n) { return n > 0 ? n * m.tile + (n - 1) * m.spacing : 0; } };
+    const Int32 apps { row(Int32(m_appItems.size())) };
+    const Int32 others { row(Int32(m_minimizedItems.size()) + 1) };
+    const Int32 width { 2 * m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + others };
+    return std::max(width, m.minWidth);
+}
+
+void Dock::fitToScreen() noexcept
+{
+    // The largest size up to the preferred one that fits.
+    const Int32 available { availableWidth() };
+    DockMetrics metrics { DockMetrics::Make(m_preferredTile) };
+
+    if (available > 0)
+        while (metrics.tile > DOCK_TILE_SIZE_MIN && dockWidth(metrics) > available)
+            metrics = DockMetrics::Make(metrics.tile - 1);
 
     if (metrics.tile == m_metrics.tile)
         return;
@@ -119,6 +171,10 @@ void Dock::applyMetrics() noexcept
     divider.setMetrics(m);
     setBorderRadius(CZBorderRadius::Make(m.radius));
 
+    // Never narrower than the 9-patch frame can draw without its corners/shadows overlapping
+    // (e.g. no apps running and nothing pinned). The items stay centered.
+    layout().setMinWidth(m.minWidth);
+
     if (auto *frame { static_cast<DockFrame*>(decorations()) })
         frame->setDockGeometry(m.height, m.radius);
 
@@ -131,7 +187,6 @@ void Dock::rebuildItems() noexcept
     auto &assets { shelf->assets };
 
     m_appItems.clear();
-    m_minimizedItems.clear();
 
     // Apps: activate the app's most recent window (restoring it if minimized), or launch it if it's
     // pinned but not running.
@@ -139,7 +194,8 @@ void Dock::rebuildItems() noexcept
     {
         auto item { std::make_unique<DockItem>(assets.appIcon(app.appId), &apps) };
         item->setRunning(!app.windows.empty());
-        item->onClicked = [appId = app.appId]{
+        item->appId = app.appId;
+        item->onClicked = [this, appId = app.appId]{
             for (const auto &a : GetShelf()->apps())
             {
                 if (a.appId != appId)
@@ -147,7 +203,7 @@ void Dock::rebuildItems() noexcept
 
                 if (a.windows.empty())
                 {
-                    GetShelf()->launch(appId);
+                    launchApp(appId);
                     return;
                 }
 
@@ -171,13 +227,51 @@ void Dock::rebuildItems() noexcept
             openMenu(*raw, e, [this, appId](Dock &){ buildAppMenu(appId); });
         };
         item->setMetrics(m_metrics);
+
+        // Keep bouncing over the new item; land once the app shows a window.
+        if (auto bounce { m_bounces.find(app.appId) }; bounce != m_bounces.end())
+        {
+            bounce->second->setItem(item.get());
+
+            if (!app.windows.empty())
+                bounce->second->stop();
+        }
+
         m_appItems.emplace_back(std::move(item));
     }
 
-    // Minimized windows: a generic window with the app's icon on top. Clicking restores it.
-    for (MForeignToplevel *window : shelf->minimized())
+    // Minimized windows: a generic window with the app's icon on top. Clicking restores it. Items
+    // are kept across rebuilds so they can grow in / shrink out while the compositor animates the
+    // window into / out of them.
+    const auto &minimized { shelf->minimized() };
+
+    for (auto &item : m_minimizedItems)
     {
+        if (item->removing || (item->window && std::find(minimized.begin(), minimized.end(), item->window.get()) != minimized.end()))
+            continue;
+
+        // Restored or closed: shrink out, then drop it.
+        item->removing = true;
+        item->animateItemScale(0.f, [this, raw = item.get()]{
+            CZTimer::OneShot(0, [this, weak = CZWeak<DockItem>(raw)](CZTimer *){
+                if (!weak) return;
+                std::erase_if(m_minimizedItems, [&weak](const auto &i){ return i.get() == weak.get(); });
+                fitToScreen();
+                reportThumbnailRects(); // Its window now gets the next free slot
+            });
+        });
+    }
+
+    for (MForeignToplevel *window : minimized)
+    {
+        const bool exists { std::any_of(m_minimizedItems.begin(), m_minimizedItems.end(),
+            [window](const auto &i){ return !i->removing && i->window == window; }) };
+
+        if (exists)
+            continue;
+
         auto item { std::make_unique<DockItem>(assets.windowIcon(), &others) };
+        item->window.reset(window);
         item->setBadge(assets.appIcon(window->props().appId));
         item->onClicked = [window = CZWeak<MForeignToplevel>(window)]{
             if (!window) return;
@@ -193,10 +287,17 @@ void Dock::rebuildItems() noexcept
         item->onContextMenu = [this, raw, window](const CZPointerButtonEvent &e){
             openMenu(*raw, e, [this, window](Dock &){ buildWindowMenu(window); });
         };
+
         item->setMetrics(m_metrics);
+        item->setItemScale(0.f);
         item->insertBefore(m_trash.get());
+        item->animateItemScale(1.f);
         m_minimizedItems.emplace_back(std::move(item));
     }
+
+    // More/fewer items: shrink to fit the screen, or grow back towards the preferred size.
+    fitToScreen();
+    reportThumbnailRects();
 }
 
 void Dock::suggestedSizeChanged()
@@ -210,6 +311,9 @@ void Dock::layoutEvent(const CZLayoutEvent &event)
 
     if (event.changes.has(CZLayoutChangeSize))
         updateInputRegion();
+
+    // Size, tile size or position changes move the thumbnail slots.
+    reportThumbnailRects();
 }
 
 Int32 Dock::shownMargin() const noexcept
@@ -254,8 +358,8 @@ void Dock::setAutoHide(bool enabled) noexcept
 
     if (!m_autoHide)
         show();
-    else if (!m_pointerInside && !divider.dragging())
-        hide();
+    else if (!m_pointerInside && !divider.dragging() && !menuOpen())
+        hide(); // (if a menu is open, menuClosed() hides it)
 }
 
 void Dock::show() noexcept
@@ -271,8 +375,13 @@ void Dock::hide() noexcept
     animateTo(0.0);
 }
 
-void Dock::dividerDragEnded() noexcept
+void Dock::dividerDragEnded(bool resized) noexcept
 {
+    // Keep the final size (saved, and applied to the docks on the other screens too). Dragging past
+    // the screen width is capped, so the size actually reached is what's kept.
+    if (resized)
+        GetShelf()->setTileSize(m_metrics.tile);
+
     // The pointer may have been released outside the dock: hide now that the drag is over.
     if (m_autoHide && !m_pointerInside)
         hide();
@@ -341,6 +450,99 @@ bool Dock::eventFilter(const CZEvent &event, CZObject &target) noexcept
     }
 
     return false;
+}
+
+/* ----------------------------------------- Minimize ----------------------------------------- */
+
+void Dock::reportThumbnailRects() noexcept
+{
+    /*
+     * Every window gets the rect of its minimized thumbnail, so the compositor knows where to animate
+     * it to as soon as it's minimized (before the dock even creates the item):
+     *  - Minimized windows: their item's final slot.
+     *  - Other windows: the slot a new item would take (after the current ones, before the trash).
+     *  - Windows being restored keep their item's rect until it's gone (the restore animation starts
+     *    there).
+     *
+     * A window has a single rect: only the dock on the first screen reports it.
+     */
+    const auto &screens { GetShelf()->marco->screens() };
+
+    if (screens.empty() || screen() != screens.front())
+        return;
+
+    Int32 count { 0 };
+
+    for (const auto &item : m_minimizedItems)
+        if (!item->removing)
+            count++;
+
+    const auto send { [this](MForeignToplevel *window, const SkIRect &rect) {
+        if (window && !rect.isEmpty() && (window->rect() != rect || window->surface() != this))
+            window->setRect(*this, rect);
+    }};
+
+    Int32 index { 0 };
+
+    for (const auto &item : m_minimizedItems)
+        if (!item->removing)
+            send(item->window, thumbnailRect(index++, count));
+
+    const SkIRect next { thumbnailRect(count, count + 1) };
+
+    for (MForeignToplevel *window : GetShelf()->windows())
+    {
+        const bool hasItem { std::any_of(m_minimizedItems.begin(), m_minimizedItems.end(),
+            [window](const auto &i){ return i->window == window; }) };
+
+        if (!hasItem)
+            send(window, next);
+    }
+}
+
+SkIRect Dock::thumbnailRect(Int32 index, Int32 count) const noexcept
+{
+    /*
+     * Where minimized item `index` (of `count`) will be once fully grown and the dock has
+     * re-centered, in this surface's current coordinates. The compositor animates the window
+     * towards it while the item may still be growing. Mirrors the layout, like dockWidth().
+     */
+    const DockMetrics &m { m_metrics };
+    const auto row { [&m](Int32 n) { return n > 0 ? n * m.tile + (n - 1) * m.spacing : 0; } };
+
+    const Int32 apps { row(Int32(m_appItems.size())) };
+    const Int32 itemsWidth { 2 * m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + row(count + 1) };
+    const Int32 dockWidth { std::max(itemsWidth, m.minWidth) };
+
+    // Left of the item inside the (final) dock rect; the items are centered in it.
+    const Int32 x { (dockWidth - itemsWidth) / 2 + m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + index * (m.tile + m.spacing) };
+
+    // The surface is centered on the screen: when its width changes it moves by half the change.
+    const SkIRect &frame { worldRect() }; // The dock rect, in surface coordinates
+    const Int32 shift { (frame.width() - dockWidth) / 2 };
+
+    return SkIRect::MakeXYWH(frame.x() + shift + x, frame.y() + m.paddingTop, m.tile, m.tile);
+}
+
+/* -------------------------------------- Launch bounce -------------------------------------- */
+
+void Dock::launchApp(const std::string &appId) noexcept
+{
+    if (!GetShelf()->launch(appId) || m_bounces.contains(appId))
+        return;
+
+    DockItem *item { nullptr };
+
+    for (auto &i : m_appItems)
+        if (i->appId == appId) { item = i.get(); break; }
+
+    if (!item)
+        return;
+
+    auto bounce { std::make_unique<LaunchBounce>(*this, GetShelf()->assets.appIcon(appId)) };
+    bounce->setItem(item);
+    bounce->onFinished = [this, appId]{ m_bounces.erase(appId); };
+    m_bounces[appId] = std::move(bounce);
 }
 
 /* --------------------------------------- Hover labels --------------------------------------- */
@@ -417,7 +619,7 @@ void Dock::hideLabels() noexcept
 
 /* -------------------------------------- Context menus -------------------------------------- */
 
-void Dock::openMenu(DockItem &item, const CZPointerButtonEvent &event, const MenuBuilder &build) noexcept
+void Dock::openMenu(AKNode &item, const CZPointerButtonEvent &event, const MenuBuilder &build) noexcept
 {
     if (!m_menu)
     {
@@ -442,6 +644,16 @@ void Dock::openMenu(DockItem &item, const CZPointerButtonEvent &event, const Men
     m_menu->pointTo(this, target, CZEdgeBottom);
     m_menu->setGrab(&event);
     m_menu->setMapped(true);
+}
+
+void Dock::openDividerMenu(const CZPointerButtonEvent &event) noexcept
+{
+    openMenu(divider, event, [](Dock &dock){
+        const bool hiding { GetShelf()->autoHide() };
+        dock.addMenuAction(hiding ? "Turn Hiding Off" : "Turn Hiding On", [hiding]{
+            GetShelf()->setAutoHide(!hiding);
+        });
+    });
 }
 
 void Dock::closeMenu() noexcept
@@ -506,7 +718,7 @@ void Dock::buildAppMenu(const std::string &appId) noexcept
 
     if (app->windows.empty())
     {
-        addMenuAction("Open", [appId]{ GetShelf()->launch(appId); });
+        addMenuAction("Open", [this, appId]{ launchApp(appId); });
         return;
     }
 

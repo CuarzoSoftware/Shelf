@@ -44,6 +44,7 @@ private:
     bool m_dragging { false };
     Float32 m_dragStartFromBottom { 0.f };
     Int32 m_dragStartTile { 0 };
+    bool m_resized { false }; // The current drag changed the size
 };
 
 #endif // DOCKDIVIDER_H

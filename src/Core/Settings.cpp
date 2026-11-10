@@ -26,6 +26,8 @@ fs::path Settings::FilePath() noexcept
 void Settings::load() noexcept
 {
     pinnedApps.clear();
+    autoHide = true;
+    tileSize = DOCK_TILE_SIZE_DEFAULT;
 
     const fs::path path { FilePath() };
     std::error_code ec;
@@ -55,6 +57,17 @@ void Settings::load() noexcept
         }
     }
 
+    if (auto it { dock->second.find("AutoHide") }; it != dock->second.end())
+        autoHide = !(it->second == "false" || it->second == "0");
+
+    if (auto it { dock->second.find("TileSize") }; it != dock->second.end())
+    {
+        char *end {};
+        const long value { std::strtol(it->second.c_str(), &end, 10) };
+        if (end != it->second.c_str())
+            tileSize = DockMetrics::Make(Int32(value)).tile; // clamped to the valid range
+    }
+
     Log(CZInfo, CZLN, "Loaded {} pinned app(s) from {}", pinnedApps.size(), path.string());
 }
 
@@ -80,7 +93,8 @@ void Settings::save() noexcept
         for (const auto &id : pinnedApps)
             out << id << ';';
 
-        out << '\n';
+        out << "\nAutoHide=" << (autoHide ? "true" : "false");
+        out << "\nTileSize=" << tileSize << '\n';
     }
 
     fs::rename(tmp, path, ec);

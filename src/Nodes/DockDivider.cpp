@@ -32,6 +32,12 @@ void DockDivider::pointerButtonEvent(const CZPointerButtonEvent &event)
 {
     AKContainer::pointerButtonEvent(event);
 
+    if (event.button == BTN_RIGHT && event.pressed && !m_dragging)
+    {
+        m_dock.openDividerMenu(event);
+        return;
+    }
+
     if (event.button != BTN_LEFT)
         return;
 
@@ -40,6 +46,7 @@ void DockDivider::pointerButtonEvent(const CZPointerButtonEvent &event)
         m_dragging = true;
         m_dragStartFromBottom = pointerFromBottom();
         m_dragStartTile = m_dock.metrics().tile;
+        m_resized = false;
 
         // Keep getting the motion while the pointer leaves the divider (or the dock).
         if (scene())
@@ -58,6 +65,12 @@ void DockDivider::pointerMoveEvent(const CZPointerMoveEvent &event)
 
     // The dock grows with the pointer: one unit of tile size per unit dragged up.
     const Int32 delta { Int32(std::lround(pointerFromBottom() - m_dragStartFromBottom)) };
+    // Not until it actually moves: a plain click must not turn a size shrunk to fit the screen
+    // into the preferred one.
+    if (delta == 0 && !m_resized)
+        return;
+
+    m_resized = true;
     m_dock.setTileSize(m_dragStartTile + delta);
 }
 
@@ -68,7 +81,7 @@ void DockDivider::endDrag() noexcept
     if (scene() && scene()->pointerGrab() == this)
         scene()->setPointerGrab(nullptr);
 
-    m_dock.dividerDragEnded();
+    m_dock.dividerDragEnded(m_resized);
 }
 
 DockDivider::Line::Line(AKNode *parent) noexcept : AKThreePatch(CZOrientation::V, parent)

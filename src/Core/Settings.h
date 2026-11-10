@@ -13,6 +13,8 @@
  * @code
  * [Dock]
  * PinnedApps=org.gnome.Nautilus;firefox;
+ * AutoHide=true
+ * TileSize=48
  * @endcode
  */
 class Settings
@@ -26,6 +28,12 @@ public:
 
     /// App ids pinned to the dock, in dock order.
     std::vector<std::string> pinnedApps;
+
+    /// Whether the dock hides when the pointer isn't over it.
+    bool autoHide { true };
+
+    /// Dock icon size (see DockMetrics), set by dragging the divider.
+    Int32 tileSize { DOCK_TILE_SIZE_DEFAULT };
 
     static std::filesystem::path FilePath() noexcept;
 };

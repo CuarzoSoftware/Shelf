@@ -50,6 +50,14 @@ public:
     /// Pins / unpins an app (saved to the settings file).
     void setPinned(const std::string &appId, bool pinned) noexcept;
 
+    /// Dock auto-hide, on every screen (saved in the settings).
+    bool autoHide() const noexcept;
+    void setAutoHide(bool enabled) noexcept;
+
+    /// Dock icon size, on every screen (saved in the settings).
+    Int32 tileSize() const noexcept { return settings.tileSize; }
+    void setTileSize(Int32 tile) noexcept;
+
     /// Launches an app through its desktop entry. Returns false if it couldn't be launched.
     bool launch(const std::string &appId) noexcept;
 
@@ -58,6 +66,9 @@ public:
 
     /// Minimized windows, in the order they were minimized.
     const std::vector<MForeignToplevel*> &minimized() const noexcept { return m_minimized; }
+
+    /// All toplevels, in the order they appeared.
+    const std::vector<MForeignToplevel*> &windows() const noexcept { return m_windows; }
 
     /// Emitted after apps() or minimized() change.
     CZSignal<> onWindowsChanged;
