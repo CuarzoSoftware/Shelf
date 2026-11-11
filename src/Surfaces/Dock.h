@@ -12,6 +12,7 @@
 #include <CZ/Marco/Roles/MLayerSurface.h>
 #include <CZ/Marco/Roles/MTooltip.h>
 #include <CZ/Marco/Roles/MDND.h>
+#include <Nodes/DockIcon.h>
 #include <CZ/Marco/Nodes/MMenuView.h>
 #include <CZ/Marco/Nodes/MMenuAction.h>
 #include <CZ/Marco/Nodes/MMenuDivider.h>
@@ -160,7 +161,8 @@ private:
     // Reordering: the drag & drop session (icon surface, reused) and the item being dragged. Its
     // icon is hidden while dragged; its slot moves to wherever it would be dropped.
     std::unique_ptr<MDND> m_dnd;
-    std::unique_ptr<AKImageFrame> m_dndIcon;
+    std::unique_ptr<DockIcon> m_dndIcon; // With its shadow (like in the dock)
+    Int32 m_dndPad { 0 };                // Shadow margin around the icon in the drag surface
     CZWeak<DockItem> m_dragItem;
     std::string m_dragAppId;
     size_t m_dragStartIndex { 0 };

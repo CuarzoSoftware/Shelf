@@ -579,9 +579,8 @@ void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
     if (!m_dnd)
     {
         m_dnd = std::make_unique<MDND>();
-        m_dndIcon = std::make_unique<AKImageFrame>(m_dnd.get());
-        m_dndIcon->layout().setWidthPercent(100.f);
-        m_dndIcon->layout().setHeightPercent(100.f);
+        m_dndIcon = std::make_unique<DockIcon>(nullptr, m_dnd.get());
+        m_dndIcon->layout().setPositionType(YGPositionTypeAbsolute);
         m_dnd->onFinished.subscribe(this, [this]{ endDrag(); });
 
         // Once the drag icon is about to be on screen: hide the item's icon (its slot stays, empty)
@@ -612,15 +611,21 @@ void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
 
     const std::string &appId { item.appId };
 
-    // The icon under the pointer exactly where it was grabbed.
+    // The icon under the pointer exactly where it was grabbed, with its shadow: the drag surface
+    // extends past the icon by the shadow's margin (DockIcon draws it outside its node).
+    m_dndPad = Int32(std::ceil(SkScalar(m_metrics.tile) * Assets::ShadowMargin()));
     m_dndIcon->setImage(GetShelf()->assets.appIcon(appId));
-    m_dnd->layout().setWidth(m_metrics.tile);
-    m_dnd->layout().setHeight(m_metrics.tile);
+    m_dndIcon->layout().setPosition(YGEdgeLeft, m_dndPad);
+    m_dndIcon->layout().setPosition(YGEdgeTop, m_dndPad);
+    m_dndIcon->layout().setWidth(m_metrics.tile);
+    m_dndIcon->layout().setHeight(m_metrics.tile);
+    m_dnd->layout().setWidth(m_metrics.tile + 2 * m_dndPad);
+    m_dnd->layout().setHeight(m_metrics.tile + 2 * m_dndPad);
     const SkIRect iconRect { item.icon.worldRect() };
     const SkPoint pointer { AKApp::Get()->pointer().pos() };
     m_dnd->setHotspot(SkIPoint::Make(
-        std::clamp(Int32(pointer.x()) - iconRect.x(), 0, m_metrics.tile),
-        std::clamp(Int32(pointer.y()) - iconRect.y(), 0, m_metrics.tile)));
+        m_dndPad + std::clamp(Int32(pointer.x()) - iconRect.x(), 0, m_metrics.tile),
+        m_dndPad + std::clamp(Int32(pointer.y()) - iconRect.y(), 0, m_metrics.tile)));
 
     std::vector<std::string> mimeTypes { DOCK_APP_MIME_TYPE };
 
@@ -805,7 +810,8 @@ void Dock::startFly(const SkPoint &local) noexcept
 {
     // The icon as it was under the pointer (the drag icon's hotspot) flies to the item's slot. The
     // item stays hidden until it lands.
-    const SkIPoint hotspot { m_dnd ? m_dnd->hotspot() : SkIPoint::Make(m_metrics.tile / 2, m_metrics.tile / 2) };
+    // (The drag icon's hotspot is relative to its surface, which includes the shadow margin.)
+    const SkIPoint hotspot { m_dnd ? m_dnd->hotspot() - SkIPoint::Make(m_dndPad, m_dndPad) : SkIPoint::Make(m_metrics.tile / 2, m_metrics.tile / 2) };
     const SkIRect from { SkIRect::MakeXYWH(Int32(local.x()) - hotspot.x(), Int32(local.y()) - hotspot.y(), m_metrics.tile, m_metrics.tile) };
 
     m_fly = std::make_unique<DropFly>(*this, GetShelf()->assets.appIcon(m_dragAppId), m_dragAppId, from);
