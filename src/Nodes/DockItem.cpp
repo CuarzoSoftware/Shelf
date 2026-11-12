@@ -1,3 +1,4 @@
+#include <Core/Shelf.h>
 #include <Nodes/DockItem.h>
 #include <CZ/AK/AKApp.h>
 #include <CZ/AK/AKScene.h>
@@ -93,7 +94,12 @@ void DockItem::applySize() noexcept
 
 void DockItem::setBadge(std::shared_ptr<RImage> image) noexcept
 {
-    badge.setImage(image);
+    // Sized for each screen's scale (see Assets::provider()).
+    if (image)
+        badge.setImageProvider(GetShelf()->assets.provider(image));
+    else
+        badge.setImage(nullptr);
+
     badge.setVisible(image != nullptr);
 }
 

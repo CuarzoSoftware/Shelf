@@ -10,7 +10,7 @@
  * @brief A dock tile's icon with a faint drop shadow following its shape.
  *
  * The icon and its shadow are pre-rendered together into one image (Assets::shadowedIcon(), cached
- * per icon) shown by a plain image frame: no live shadow effect to recompute when repainting. The
+ * per icon and size, rendered for the size it's drawn at on each screen) shown by a plain image frame: no live shadow effect to recompute when repainting. The
  * frame extends past the node by the shadow's margin, as a percentage of the node, so it follows
  * the tile size (resizing the dock, items growing/shrinking).
  */

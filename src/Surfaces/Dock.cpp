@@ -1,3 +1,4 @@
+#include <CZ/Core/CZEase.h>
 #include <Surfaces/Dock.h>
 #include <Nodes/DockFrame.h>
 #include <Core/Log.h>
@@ -28,6 +29,26 @@ Dock::Dock(MScreen &screen) noexcept :
         [this](CZAnimation *) { setProgress(m_to); }),
     m_showTimer([this](CZTimer *) { show(); })
 {
+    // The empty slot for dropped .desktop files (see openPinGap()): never takes input.
+    {
+        const SkRegion empty;
+        m_pinGap.setInputRegion(&empty);
+        m_pinGapAnim.setDuration(DOCK_PIN_GAP_MS);
+        m_pinGapAnim.onUpdate.subscribe(this, [this](CZAnimation *a){
+            setPinGapProgress(m_pinGapFrom + (m_pinGapTo - m_pinGapFrom) * SkScalar(CZEase::OutCubic(a->value())));
+        });
+        m_pinGapAnim.onFinish.subscribe(this, [this](CZAnimation*){
+            setPinGapProgress(m_pinGapTo);
+
+            // Closed: out of the dock.
+            if (m_pinGapTo <= 0.f && !m_pinGapHeld)
+            {
+                m_pinGap.setParent(nullptr);
+                m_pinGapOpen = false;
+            }
+        });
+    }
+
     screen.userData = this;
     setScreen(&screen);
     setScope("cz-shelf-dock");
@@ -278,6 +299,10 @@ void Dock::rebuildItems() noexcept
 
         m_appItems.emplace_back(std::move(item));
     }
+
+    // An open pin slot stays where it was (the new items were appended after it).
+    if (m_pinGapOpen)
+        placePinGap();
 
     // Minimized windows: a generic window with the app's icon on top. Clicking restores it. Items
     // are kept across rebuilds so they can grow in / shrink out while the compositor animates the
@@ -668,6 +693,9 @@ void Dock::dndLeft() noexcept
     m_dndInside = false;
     setTrashTarget(false);
 
+    if (!m_pinGapHeld)
+        closePinGap(true);
+
     if (m_autoHide && !m_pointerInside && !reordering() && !menuOpen() && !divider.dragging())
         hide();
 }
@@ -684,6 +712,18 @@ void Dock::dragOver(MDNDOffer &offer, const SkPoint &pos) noexcept
 
     setTrashTarget(false);
 
+    // Files from other apps: .desktop files are pinned where dropped (others are ignored, the list
+    // is only read on drop). Copied: the source must never delete them.
+    if (canPin(offer))
+    {
+        offer.accept("text/uri-list");
+        offer.setActions(MDNDOffer::Copy, MDNDOffer::Copy);
+        openPinGap(size_t(std::clamp(appSlotAt(pos), 0, Int32(pinnedCount()))));
+        return;
+    }
+
+    closePinGap(true);
+
     // Otherwise only our own apps can be dropped here.
     if (!reordering() || !offer.hasMimeType(DOCK_APP_MIME_TYPE))
     {
@@ -696,11 +736,114 @@ void Dock::dragOver(MDNDOffer &offer, const SkPoint &pos) noexcept
     m_lastDragPos = pos;
     m_lastDragPosValid = true;
 
-    // The slot under the pointer (all app slots are the same size).
+    moveDraggedItemTo(size_t(std::clamp(appSlotAt(pos), 0, Int32(m_appItems.size()) - 1)));
+}
+
+Int32 Dock::appSlotAt(const SkPoint &pos) const noexcept
+{
+    // All app slots are the same size.
     const DockMetrics &m { m_metrics };
     const SkScalar start { SkScalar(apps.worldRect().x() + deskSlots() * (m.tile + m.spacing)) }; // After Desk's tile
-    const Int32 slot { Int32(std::floor((pos.x() - start + m.spacing * 0.5f) / SkScalar(m.tile + m.spacing))) };
-    moveDraggedItemTo(size_t(std::clamp(slot, 0, Int32(m_appItems.size()) - 1)));
+    return Int32(std::floor((pos.x() - start + m.spacing * 0.5f) / SkScalar(m.tile + m.spacing)));
+}
+
+size_t Dock::pinnedCount() const noexcept
+{
+    size_t n { 0 };
+
+    while (n < m_appItems.size() && GetShelf()->isPinned(m_appItems[n]->appId))
+        n++;
+
+    return n;
+}
+
+void Dock::setPinGapProgress(SkScalar progress) noexcept
+{
+    // Grows from nothing to a tile plus its spacing (the negative margin cancels the row's gap, so
+    // a closed slot takes no room at all).
+    m_pinGapProgress = progress;
+    const DockMetrics &m { m_metrics };
+    m_pinGap.layout().setWidth(progress * SkScalar(m.tile + m.spacing));
+    m_pinGap.layout().setHeight(m.tile);
+    m_pinGap.layout().setMargin(YGEdgeRight, -SkScalar(m.spacing));
+}
+
+void Dock::placePinGap() noexcept
+{
+    // Before the app at m_pinGapIndex, or after the last one.
+    if (m_pinGapIndex < m_appItems.size())
+        m_pinGap.insertBefore(m_appItems[m_pinGapIndex].get());
+    else if (!m_appItems.empty())
+        m_pinGap.insertAfter(m_appItems.back().get());
+}
+
+void Dock::openPinGap(size_t index) noexcept
+{
+    if (!m_pinGapOpen)
+    {
+        m_pinGapOpen = true;
+        m_pinGapIndex = index;
+        m_pinGap.setParent(&apps);
+        placePinGap();
+        setPinGapProgress(0.f);
+    }
+    else if (index != m_pinGapIndex)
+    {
+        // FLIP, like moveDraggedItemTo(): the icons slide from where they were drawn.
+        std::unordered_map<DockItem*, SkScalar> before;
+
+        for (auto &item : m_appItems)
+            before[item.get()] = item->layout().calculatedLeft();
+
+        m_pinGapIndex = index;
+        placePinGap();
+
+        for (auto &i : m_appItems)
+            i->slideFrom(0.f);
+
+        scene().root()->layout().calculate();
+
+        for (auto &i : m_appItems)
+            i->slideFrom(before[i.get()] - i->layout().calculatedLeft());
+    }
+
+    // (Re)open.
+    if (m_pinGapTo != 1.f || (!m_pinGapAnim.isRunning() && m_pinGapProgress < 1.f))
+    {
+        m_pinGapAnim.pause();
+        m_pinGapFrom = m_pinGapProgress;
+        m_pinGapTo = 1.f;
+        m_pinGapAnim.reset();
+    }
+}
+
+void Dock::closePinGap(bool animated) noexcept
+{
+    if (!m_pinGapOpen || m_pinGapHeld)
+        return;
+
+    if (!animated || m_pinGapProgress <= 0.f)
+    {
+        m_pinGapAnim.pause();
+        m_pinGapTo = 0.f;
+        setPinGapProgress(0.f);
+        m_pinGap.setParent(nullptr);
+        m_pinGapOpen = false;
+        return;
+    }
+
+    if (m_pinGapTo == 0.f && m_pinGapAnim.isRunning())
+        return;
+
+    m_pinGapAnim.pause();
+    m_pinGapFrom = m_pinGapProgress;
+    m_pinGapTo = 0.f;
+    m_pinGapAnim.reset();
+}
+
+bool Dock::canPin(MDNDOffer &offer) const noexcept
+{
+    return !reordering() && offer.hasMimeType("text/uri-list") && !offer.hasMimeType(DOCK_APP_MIME_TYPE);
 }
 
 void Dock::dropped(MDNDOffer &offer, const SkPoint &pos) noexcept
@@ -712,6 +855,23 @@ void Dock::dropped(MDNDOffer &offer, const SkPoint &pos) noexcept
         offer.finish();
         GetShelf()->trashDroppedFiles(fd);
         dndLeft(); // No leave event follows a drop
+        return;
+    }
+
+    if (canPin(offer))
+    {
+        // Where the slot was opened. It stays open until the app takes it (or closes if nothing
+        // could be pinned).
+        const size_t index { m_pinGapOpen ? m_pinGapIndex : size_t(std::clamp(appSlotAt(pos), 0, Int32(pinnedCount()))) };
+        const Int32 fd { offer.receive("text/uri-list") };
+        offer.finish();
+        m_pinGapHeld = m_pinGapOpen;
+        dndLeft(); // No leave event follows a drop
+
+        GetShelf()->pinDroppedFiles(fd, index, [this](bool pinned){
+            m_pinGapHeld = false;
+            closePinGap(!pinned); // Pinned: the new item is already in its place
+        });
         return;
     }
 

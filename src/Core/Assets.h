@@ -11,6 +11,8 @@
 #include <tuple>
 #include <unordered_map>
 #include <vector>
+#include <filesystem>
+#include <CZ/AK/Nodes/AKImageFrame.h>
 
 namespace CZ { class RImage; }
 
@@ -54,12 +56,24 @@ public:
     std::shared_ptr<RImage> windowIcon() noexcept;
 
     /**
-     * @brief @p icon with its drop shadow, pre-rendered (cached per icon and screen scale).
+     * @brief @p icon with its drop shadow, pre-rendered @p pixels wide/tall (cached per icon and size).
      *
-     * Rendered at the largest tile size and drawn scaled down: the icon fills the middle, with a
+     * The icon (loaded again at its exact size, see sized()) fills the middle, with a
      * ShadowMargin() border (fraction of the icon size) on every side for the shadow.
      */
-    std::shared_ptr<RImage> shadowedIcon(const std::shared_ptr<RImage> &icon) noexcept;
+    std::shared_ptr<RImage> shadowedIcon(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept;
+
+    /**
+     * @brief @p icon (loaded by this class) again, at @p pixels for a screen with scale @p scale.
+     *
+     * SVGs are rendered again at that size. Raster themed icons are looked up again for that size
+     * and scale (scaled, antialiased, only if the theme has no such size). Other files
+     * are loaded again at that size. Cached. Returns @p icon itself if it's not known.
+     */
+    std::shared_ptr<RImage> sized(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept;
+
+    /// For AKImageFrame::setImageProvider(): @p icon at the size it's drawn at (nullptr for nullptr).
+    AKImageFrame::ImageProvider provider(std::shared_ptr<RImage> icon) noexcept;
 
     /// The shadow border of shadowedIcon(), as a fraction of the icon size.
     static float ShadowMargin() noexcept;
@@ -84,14 +98,25 @@ private:
     std::unordered_map<std::string, std::shared_ptr<RImage>> m_icons;    // by icon name
     std::unordered_map<std::string, std::shared_ptr<RImage>> m_appIcons; // by app id
 
+    std::shared_ptr<RImage> loadFile(const std::filesystem::path &path, const std::string &iconName = {}) noexcept;
+
+    // Where each loaded icon comes from (to load it at other sizes).
+    struct Source
+    {
+        std::weak_ptr<RImage> image;
+        std::string iconName;       ///< Themed icon (looked up again per size and scale)
+        std::filesystem::path path; ///< Otherwise, the file
+    };
+    std::unordered_map<const RImage*, Source> m_sources;
+    std::map<std::tuple<std::string, Int32, Int32>, std::shared_ptr<RImage>> m_sized; // By source, size and scale
+
     struct Shadowed
     {
         std::weak_ptr<RImage> icon;
-        Int32 scale;
         std::shared_ptr<RImage> image;
     };
 
-    std::unordered_map<const RImage*, Shadowed> m_shadowed;
+    std::map<std::tuple<const RImage*, Int32, Int32>, Shadowed> m_shadowed; // By icon, size and scale
 };
 
 #endif // ASSETS_H

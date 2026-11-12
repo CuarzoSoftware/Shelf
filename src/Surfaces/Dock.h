@@ -134,6 +134,28 @@ private:
     /// Top-left corner of this surface on its screen (it's centered at the bottom).
     SkPoint screenOrigin() const noexcept;
     bool overTrash(MDNDOffer &offer, const SkPoint &pos) const noexcept;
+
+    /// Files (e.g. .desktop files from a file manager or the desktop) that may be pinned.
+    bool canPin(MDNDOffer &offer) const noexcept;
+
+    /// The app slot under @p pos (0 = the first app after Desk's tile), unclamped.
+    Int32 appSlotAt(const SkPoint &pos) const noexcept;
+
+    /// Number of pinned apps (they come first in m_appItems).
+    size_t pinnedCount() const noexcept;
+
+    // Pinning dropped .desktop files: an empty slot opens where the app would be pinned, like for
+    // a reordered app (growing in, the other icons sliding to make room).
+    void openPinGap(size_t index) noexcept;
+    void closePinGap(bool animated) noexcept;
+    void placePinGap() noexcept;
+    void setPinGapProgress(SkScalar progress) noexcept;
+    AKContainer m_pinGap { YGFlexDirectionRow, false };
+    CZLinearAnimation m_pinGapAnim;
+    SkScalar m_pinGapProgress { 0.f }, m_pinGapFrom { 0.f }, m_pinGapTo { 0.f };
+    size_t m_pinGapIndex { 0 };
+    bool m_pinGapOpen { false };   // In the dock (opening, open or closing)
+    bool m_pinGapHeld { false };   // Dropped: kept until the app is pinned (see dropped())
     void setTrashTarget(bool target) noexcept;
     void dndLeft() noexcept;
     SkIRect thumbnailRect(Int32 index, Int32 count) const noexcept;

@@ -308,6 +308,25 @@ void Shelf::trashFiles(const std::vector<std::filesystem::path> &paths) noexcept
 
 void Shelf::trashDroppedFiles(Int32 fd) noexcept
 {
+    readDroppedFiles(fd, [this](std::vector<std::filesystem::path> files){ trashFiles(files); });
+}
+
+void Shelf::pinDroppedFiles(Int32 fd, size_t index, std::function<void(bool pinned)> done) noexcept
+{
+    if (fd < 0)
+    {
+        if (done) done(false);
+        return;
+    }
+
+    readDroppedFiles(fd, [this, index, done](std::vector<std::filesystem::path> files){
+        const bool pinned { pinDesktopFiles(files, index) };
+        if (done) done(pinned);
+    });
+}
+
+void Shelf::readDroppedFiles(Int32 fd, std::function<void(std::vector<std::filesystem::path>)> done) noexcept
+{
     if (fd < 0)
         return;
 
@@ -315,7 +334,7 @@ void Shelf::trashDroppedFiles(Int32 fd) noexcept
     auto data { std::make_shared<std::string>() };
 
     // The source writes the list asynchronously (it may even be busy): read as it arrives.
-    auto reader { CZEventSource::Make(fd, EPOLLIN | EPOLLHUP, CZOwn::Own, [this, data](int fd, UInt32, CZEventSource *source){
+    auto reader { CZEventSource::Make(fd, EPOLLIN | EPOLLHUP, CZOwn::Own, [this, data, done](int fd, UInt32, CZEventSource *source){
         char buf[4096];
         ssize_t n;
 
@@ -326,7 +345,7 @@ void Shelf::trashDroppedFiles(Int32 fd) noexcept
             return; // More to come
 
         // EOF (or error): done.
-        trashFiles(XDGTrash::ParseUriList(*data));
+        done(XDGTrash::ParseUriList(*data));
 
         // Drop the source outside its own callback.
         CZTimer::OneShot(0, [this, source](CZTimer*){
@@ -338,6 +357,81 @@ void Shelf::trashDroppedFiles(Int32 fd) noexcept
         m_dropReaders.emplace_back(std::move(reader));
     else
         close(fd);
+}
+
+bool Shelf::pinDesktopFiles(const std::vector<std::filesystem::path> &files, size_t index) noexcept
+{
+    if (!xdgkit)
+        return false;
+
+    std::vector<std::string> pinned { settings.pinnedApps };
+    index = std::min(index, pinned.size());
+    bool changed { false };
+
+    for (const auto &file : files)
+    {
+        if (file.extension() != ".desktop")
+            continue;
+
+        // Only applications (not links or folders).
+        auto dropped { XDGDesktopEntry::Load(file) };
+
+        if (!dropped)
+        {
+            Log(CZWarning, CZLN, "Not an application, can't be pinned: {}", file.string());
+            continue;
+        }
+
+        const std::string id { file.stem().string() };
+
+        // Not an installed app (e.g. dropped from the desktop or Downloads): install it, so it's
+        // found by its id like any other (launching, icons, matching its windows).
+        if (auto installed { xdgkit->desktopEntry(id) }; !installed)
+        {
+            const char *dataHome { getenv("XDG_DATA_HOME") };
+            const char *home { getenv("HOME") };
+            const std::filesystem::path dir { dataHome && dataHome[0] == '/' ? std::filesystem::path(dataHome) / "applications" :
+                                              std::filesystem::path(home ? home : "") / ".local/share/applications" };
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            std::filesystem::copy_file(file, dir / file.filename(), std::filesystem::copy_options::skip_existing, ec);
+
+            if (ec)
+            {
+                Log(CZError, CZLN, "Can't install {}: {}", file.string(), ec.message());
+                continue;
+            }
+
+            xdgkit->forgetDesktopEntry(id); // Its miss was cached just now
+
+            if (!xdgkit->desktopEntry(id))
+            {
+                Log(CZError, CZLN, "Installed {} but it isn't found as {}", file.string(), id);
+                continue;
+            }
+
+            Log(CZInfo, CZLN, "Installed {} to {}", file.string(), dir.string());
+        }
+
+        // Pinned there (moved if it already was).
+        if (auto it { std::find(pinned.begin(), pinned.end(), id) }; it != pinned.end())
+        {
+            const size_t old { size_t(it - pinned.begin()) };
+            pinned.erase(it);
+
+            if (old < index)
+                index--;
+        }
+
+        pinned.insert(pinned.begin() + Int64(index++), id);
+        changed = true;
+        Log(CZInfo, CZLN, "Pinned {} (dropped)", id);
+    }
+
+    if (changed)
+        setPinnedApps(pinned);
+
+    return changed;
 }
 
 /* --------------------------------- Pinned apps / launching --------------------------------- */

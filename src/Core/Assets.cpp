@@ -42,7 +42,7 @@ std::shared_ptr<RImage> Assets::loadIcon(const std::string &name) noexcept
 
     // Absolute paths are allowed in .desktop Icon keys.
     if (name.front() == '/')
-        return RImage::LoadFile(name, m_format, { DOCK_ICON_LOAD_SIZE, DOCK_ICON_LOAD_SIZE });
+        return loadFile(name);
 
     const auto *icon { xdgkit->iconThemeManager().findIcon(
         name, DOCK_ICON_LOAD_SIZE, 1, XDGIcon::PNG | XDGIcon::SVG, { DOCK_ICON_THEME, "" }) };
@@ -53,12 +53,70 @@ std::shared_ptr<RImage> Assets::loadIcon(const std::string &name) noexcept
     std::shared_ptr<RImage> image;
 
     if (icon->extensions() & XDGIcon::SVG)
-        image = RImage::LoadFile(icon->getPath(XDGIcon::SVG), m_format, { DOCK_ICON_LOAD_SIZE, DOCK_ICON_LOAD_SIZE });
+        image = loadFile(icon->getPath(XDGIcon::SVG), name);
 
     if (!image && (icon->extensions() & XDGIcon::PNG))
-        image = RImage::LoadFile(icon->getPath(XDGIcon::PNG), m_format, { DOCK_ICON_LOAD_SIZE, DOCK_ICON_LOAD_SIZE });
+        image = loadFile(icon->getPath(XDGIcon::PNG), name);
 
     return image;
+}
+
+std::shared_ptr<RImage> Assets::loadFile(const std::filesystem::path &path, const std::string &iconName) noexcept
+{
+    auto image { RImage::LoadFile(path, m_format, { DOCK_ICON_LOAD_SIZE, DOCK_ICON_LOAD_SIZE }) };
+
+    if (image)
+    {
+        std::erase_if(m_sources, [](const auto &pair){ return pair.second.image.expired(); });
+        m_sources[image.get()] = { image, iconName, path };
+    }
+
+    return image;
+}
+
+std::shared_ptr<RImage> Assets::sized(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept
+{
+    if (!icon)
+        return {};
+
+    auto src { m_sources.find(icon.get()) };
+
+    if (src == m_sources.end() || src->second.image.expired())
+        return icon;
+
+    const Source &source { src->second };
+    scale = std::max(1, scale);
+    const std::tuple<std::string, Int32, Int32> key { source.iconName.empty() ? source.path.string() : "icon:" + source.iconName, pixels, scale };
+
+    if (auto it { m_sized.find(key) }; it != m_sized.end())
+        return it->second;
+
+    // An SVG is rendered again at that size (the same file: other sizes of a theme may be different
+    // artwork, e.g. padded for panels). A raster themed icon: the theme's file for that size and
+    // scale (only scaled, antialiased, if the theme doesn't have that size).
+    std::filesystem::path path { source.path };
+    auto &xdgkit { GetShelf()->xdgkit };
+
+    if (!source.iconName.empty() && source.path.extension() != ".svg" && xdgkit)
+        if (const auto *found { xdgkit->iconThemeManager().findIcon(source.iconName, std::max(1, (pixels + scale - 1) / scale), scale,
+                                                                    XDGIcon::PNG | XDGIcon::SVG, { DOCK_ICON_THEME, "" }) })
+            path = found->getPath((found->extensions() & XDGIcon::SVG) ? XDGIcon::SVG : XDGIcon::PNG);
+
+    auto image { RImage::LoadFile(path, m_format, { pixels, pixels }) };
+
+    if (!image)
+        image = icon;
+
+    m_sized[key] = image;
+    return image;
+}
+
+AKImageFrame::ImageProvider Assets::provider(std::shared_ptr<RImage> icon) noexcept
+{
+    if (!icon)
+        return nullptr;
+
+    return [this, icon](Int32 pixels, Int32 scale){ return sized(icon, pixels, scale); };
 }
 
 std::shared_ptr<RImage> Assets::themedIcon(const std::vector<std::string> &names) noexcept
@@ -125,34 +183,28 @@ float Assets::ShadowMargin() noexcept
     return DOCK_ICON_SHADOW_RADIUS / SkScalar(DOCK_TILE_SIZE_DEFAULT);
 }
 
-std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon) noexcept
+std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept
 {
     if (!icon)
         return {};
 
-    // The largest screen scale (sharp everywhere).
-    Int32 scale { 1 };
-    for (MScreen *s : GetShelf()->marco->screens())
-        scale = std::max(scale, s->props().scale);
+    pixels = std::max(pixels, 8);
 
-    if (auto it { m_shadowed.find(icon.get()) }; it != m_shadowed.end() && !it->second.icon.expired() && it->second.scale == scale)
+    if (auto it { m_shadowed.find({ icon.get(), pixels, scale }) }; it != m_shadowed.end() && !it->second.icon.expired())
         return it->second.image;
 
     std::erase_if(m_shadowed, [](const auto &pair){ return pair.second.icon.expired(); });
 
-    auto source { icon->skImage() };
-
-    if (!source)
-        return icon;
-
-    // In logical units of the largest tile size (the surface applies the scale).
-    const SkScalar size { SkScalar(DOCK_TILE_SIZE_MAX) };
-    const SkScalar margin { std::ceil(size * ShadowMargin()) };
-    const SkScalar ratio { size / SkScalar(DOCK_TILE_SIZE_DEFAULT) };
+    // The image covers the icon plus the shadow margin on each side, in pixels (scale 1): the icon
+    // is drawn at its exact size (never resampled).
+    const Int32 size { std::max(1, Int32(std::floor(SkScalar(pixels) / (1.f + 2.f * ShadowMargin())))) };
+    const SkScalar margin { (pixels - size) / 2.f };
+    const SkScalar ratio { SkScalar(size) / SkScalar(DOCK_TILE_SIZE_DEFAULT) };
     const SkScalar sigma { DOCK_ICON_SHADOW_RADIUS * ratio / 3.f };
     const SkScalar dy { DOCK_ICON_SHADOW_OFFSET_Y * ratio };
 
-    auto surface { RSurface::Make(SkISize::Make(Int32(size + 2 * margin), Int32(size + 2 * margin)), scale, true) };
+    auto source { sized(icon, size, scale)->skImage() };
+    auto surface { source ? RSurface::Make(SkISize::Make(pixels, pixels), 1, true) : nullptr };
 
     if (!surface)
         return icon;
@@ -162,7 +214,7 @@ std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon
         SkCanvas *c { pass->getCanvas() };
         c->clear(SK_ColorTRANSPARENT);
 
-        const SkScalar s { std::min(size / source->width(), size / source->height()) };
+        const SkScalar s { std::min(SkScalar(size) / source->width(), SkScalar(size) / source->height()) };
         const SkRect dst { SkRect::MakeXYWH(margin + (size - source->width() * s) / 2.f, margin + (size - source->height() * s) / 2.f,
                                             source->width() * s, source->height() * s) };
 
@@ -174,7 +226,7 @@ std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon
     }
 
     auto image { surface->image() };
-    m_shadowed[icon.get()] = { icon, scale, image };
+    m_shadowed[{ icon.get(), pixels, scale }] = { icon, image };
     return image;
 }
 

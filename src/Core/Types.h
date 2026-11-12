@@ -111,6 +111,7 @@ constexpr SkScalar DOCK_LABEL_FONT_SIZE { 14.f };
 // Minimized window items grow in (and shrink out when restored) while the compositor animates the
 // window into (out of) them. Matches cz-crystals' minimize animation.
 constexpr UInt32 DOCK_MINIMIZE_MS       { 420 };
+constexpr UInt32 DOCK_PIN_GAP_MS { 220 }; // Opening/closing the slot for a dropped .desktop file
 
 // --- Reordering (drag & drop) -------------------------------------------------------------------
 
