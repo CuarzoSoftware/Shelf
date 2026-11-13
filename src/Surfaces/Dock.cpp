@@ -337,6 +337,13 @@ void Dock::rebuildItems() noexcept
         auto item { std::make_unique<DockItem>(assets.windowIcon(), &others) };
         item->window.reset(window);
         item->setBadge(assets.appIcon(window->props().appId));
+
+        // A small version of the window (the compositor's, title bar included) under the app icon.
+        // Kept as the generic window icon if the compositor can't capture it.
+        window->captureImage([weak = CZWeak<DockItem>(item.get())](std::shared_ptr<RImage> image){
+            if (weak && image && !weak->removing)
+                weak->icon.setImage(image);
+        });
         item->onClicked = [window = CZWeak<MForeignToplevel>(window)]{
             if (!window) return;
             window->setMinimized(false);
