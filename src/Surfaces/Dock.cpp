@@ -52,7 +52,7 @@ Dock::Dock(MScreen &screen) noexcept :
     screen.userData = this;
     setScreen(&screen);
     setScope("cz-shelf-dock");
-    setLayer(Layer::Top);
+    setLayer(Layer::Overlay); // Crystals draws it above every other overlay surface (its shell layer)
     setKeyboardInteractivity(KeyboardInteractivity::None);
     setAnchor(CZEdgeBottom);
 
