@@ -67,6 +67,10 @@ Dock::Dock(MScreen &screen) noexcept :
     layout().setJustifyContent(YGJustifyCenter);
     setDecorations(std::make_unique<DockFrame>());
 
+    // The items' hit areas reach below the dock rect, down to the screen bottom (see
+    // updateHitAreas()): nothing is clipped to it (its rounded corners are masks)
+    enableChildrenClipping(false);
+
     background.layout().setPositionType(YGPositionTypeAbsolute);
     background.layout().setPosition(YGEdgeLeft, 0.f);
     background.layout().setPosition(YGEdgeTop, 0.f);
@@ -226,6 +230,7 @@ void Dock::applyMetrics() noexcept
         frame->setDockGeometry(m.height, m.radius);
 
     updateInputRegion();
+    updateHitAreas();
 }
 
 void Dock::rebuildItems() noexcept
@@ -368,6 +373,7 @@ void Dock::rebuildItems() noexcept
 
     // More/fewer items: shrink to fit the screen, or grow back towards the preferred size.
     fitToScreen();
+    updateHitAreas();
     reportThumbnailRects();
 }
 
@@ -407,6 +413,35 @@ void Dock::updateInputRegion() noexcept
     const Int32 width { std::max(1, Int32(layout().calculatedWidth())) };
     SkRegion region { SkIRect::MakeXYWH(m.fLeft, m.fTop, width, m_metrics.height + m.fBottom) };
     setCustomInputRegion(&region);
+}
+
+void Dock::updateHitAreas() noexcept
+{
+    // [padding][apps][gap][divider][gap][others][padding]: the items share the gaps between them
+    // halfway; the ones at the ends take the padding, the ones next to the divider their gap to it
+    // (the divider keeps its slot). Vertically: the dock's top padding and everything below the
+    // icons, down to the bottom of the surface (below the screen edge while shown).
+    const DockMetrics &m { m_metrics };
+    auto *frame { static_cast<DockFrame*>(decorations()) };
+    const Int32 below { m.paddingBottom + (frame ? frame->margins().fBottom : DockFrame::BaseMargins().fBottom) };
+    const Int32 half { m.spacing / 2 };
+
+    for (AKContainer *group : { &apps, &others })
+    {
+        std::vector<DockItem*> list;
+
+        for (AKNode *node : group->children())
+            if (auto *item { dynamic_cast<DockItem*>(node) })
+                list.push_back(item);
+
+        for (size_t i = 0; i < list.size(); i++)
+        {
+            const bool first { i == 0 }, last { i + 1 == list.size() };
+            const Int32 left { first ? (group == &apps ? m.paddingSide : m.spacing) : half };
+            const Int32 right { last ? (group == &apps ? m.spacing : m.paddingSide) : m.spacing - half };
+            list[i]->setHitExtents(left, m.paddingTop, right, below);
+        }
+    }
 }
 
 void Dock::updateExclusiveZone() noexcept
@@ -931,6 +966,8 @@ void Dock::moveDraggedItemTo(size_t index) noexcept
     for (auto &i : m_appItems)
         if (i.get() != m_dragItem.get())
             i->slideFrom(before[i.get()] - i->layout().calculatedLeft());
+
+    updateHitAreas();
 }
 
 SkPoint Dock::screenOrigin() const noexcept
@@ -1141,6 +1178,7 @@ void Dock::syncDeskItem() noexcept
     // No onDragStarted: it can't be moved.
     setupItem(*m_deskItem);
     m_deskItem->setMetrics(m_metrics);
+    updateHitAreas();
 }
 
 void Dock::setupItem(DockItem &item) noexcept

@@ -37,11 +37,25 @@ DockItem::DockItem(std::shared_ptr<RImage> image, AKNode *parent) noexcept :
     badge.layout().setPosition(YGEdgeBottom, 0.f);
     badge.setVisible(false);
 
+    // The item's input is its hit area's (see hitArea)
+    setInputRegion(&empty);
+    hitArea.layout().setPositionType(YGPositionTypeAbsolute);
+    setHitExtents(0, 0, 0, 0);
+
     indicator.setInputRegion(&empty);
     indicator.layout().setPositionType(YGPositionTypeAbsolute);
     indicator.setVisible(false);
     indicator.onColorSchemeChanged.subscribe(this, [this](CZColorScheme){ updateIndicatorColor(); });
     updateIndicatorColor();
+}
+
+void DockItem::setHitExtents(Int32 left, Int32 top, Int32 right, Int32 bottom) noexcept
+{
+    // Both edges of each axis: it follows the item's size (minimize animations, ...)
+    hitArea.layout().setPosition(YGEdgeLeft, -left);
+    hitArea.layout().setPosition(YGEdgeTop, -top);
+    hitArea.layout().setPosition(YGEdgeRight, -right);
+    hitArea.layout().setPosition(YGEdgeBottom, -bottom);
 }
 
 void DockItem::setMetrics(const DockMetrics &m) noexcept

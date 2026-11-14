@@ -165,6 +165,10 @@ private:
     void animateTo(Float64 target) noexcept;
     void setProgress(Float64 progress) noexcept;
     void updateInputRegion() noexcept;
+
+    /// Extends each item's input to the gaps around it, the top of the dock and the screen bottom
+    /// (see DockItem::hitArea). After items are added, removed or moved, or the metrics change.
+    void updateHitAreas() noexcept;
     void updateExclusiveZone() noexcept;
     Int32 shownMargin() const noexcept;
     Int32 hiddenMargin() const noexcept;

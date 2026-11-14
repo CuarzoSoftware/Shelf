@@ -73,6 +73,18 @@ public:
     AKImageFrame badge { this };
     AKRoundSolidColor indicator { 0, CZBorderRadius::Make(0), this };
 
+    /**
+     * @brief Takes the item's input, extended past its tile (the item itself takes none).
+     *
+     * It reaches into the gaps on each side (meeting its neighbors' halfway, or the dock's ends),
+     * up to the top of the dock and down to the bottom of the screen, so items are hard to miss.
+     * Its events propagate to the item. See setHitExtents().
+     */
+    AKContainer hitArea { YGFlexDirectionColumn, false, this };
+
+    /// How far hitArea reaches past the tile on each side.
+    void setHitExtents(Int32 left, Int32 top, Int32 right, Int32 bottom) noexcept;
+
 protected:
     void pointerButtonEvent(const CZPointerButtonEvent &event) override;
     void pointerEnterEvent(const CZPointerEnterEvent &event) override;
