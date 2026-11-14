@@ -474,8 +474,25 @@ void Dock::show() noexcept
     animateTo(1.0);
 }
 
+void Dock::setExposeShown(bool shown) noexcept
+{
+    if (m_exposeShown == shown)
+        return;
+
+    m_exposeShown = shown;
+
+    if (shown)
+        show();
+    else if (m_autoHide && !m_pointerInside && !divider.dragging() && !menuOpen() && !reordering() && !m_fly)
+        hide();
+}
+
 void Dock::hide() noexcept
 {
+    // Kept while Exposé shows (see setExposeShown())
+    if (m_exposeShown)
+        return;
+
     m_showTimer.stop();
     hideLabels();
     animateTo(0.0);

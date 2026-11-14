@@ -46,6 +46,9 @@ public:
 
     /// Auto-hide (enabled by default). When disabled the dock stays shown and reserves its area.
     void setAutoHide(bool enabled) noexcept;
+
+    /// Shown while the compositor's Exposé is (even if it auto-hides), see Shelf::setExposeShown().
+    void setExposeShown(bool shown) noexcept;
     bool autoHide() const noexcept { return m_autoHide; }
 
     /// Slides the dock in / out (no-op if already there or heading there).
@@ -210,6 +213,7 @@ private:
     bool m_dndInside { false };   // A drag & drop session is over the dock (from any client)
     bool m_trashTarget { false }; // Files are being dragged over the trash
     bool m_pointerInside { false };
+    bool m_exposeShown { false };
 
     // 0 = hidden, 1 = shown
     Float64 m_progress { 0.0 };

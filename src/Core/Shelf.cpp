@@ -54,6 +54,9 @@ Shelf::~Shelf() noexcept
     if (m_deskMatch)
         sd_bus_slot_unref(m_deskMatch);
 
+    if (m_exposeMatch)
+        sd_bus_slot_unref(m_exposeMatch);
+
     m_dropReaders.clear();
     m_inotifySource.reset();
 
@@ -200,8 +203,27 @@ void Shelf::initDeskWatch() noexcept
             return 0;
         }, this, "s", DeskBusName);
 
+    // Crystals' Exposé: the docks show while it does (from any sender: the compositor)
+    sd_bus_match_signal_async(bus->bus(), &m_exposeMatch, nullptr, "/org/cuarzo/Crystals",
+        "org.cuarzo.Crystals", "ExposeChanged",
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            int shown { 0 };
+
+            if (sd_bus_message_read(m, "b", &shown) >= 0 && _shelf == data)
+                static_cast<Shelf*>(data)->setExposeShown(shown);
+
+            return 0;
+        }, nullptr, this);
+
     // Async requests are only queued: send them now (the bus source only waits for input).
     sd_bus_flush(bus->bus());
+}
+
+void Shelf::setExposeShown(bool shown) noexcept
+{
+    for (MScreen *s : marco->screens())
+        if (auto *dock { static_cast<Dock*>(s->userData) })
+            dock->setExposeShown(shown);
 }
 
 void Shelf::setDeskRunning(bool running) noexcept

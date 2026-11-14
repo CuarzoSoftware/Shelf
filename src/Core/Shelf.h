@@ -132,6 +132,9 @@ private:
     void updateTrashState() noexcept;
     void trashFiles(const std::vector<std::filesystem::path> &paths) noexcept;
     void setDeskRunning(bool running) noexcept;
+
+    /// Crystals' Exposé shown/hidden (org.cuarzo.Crystals ExposeChanged): the docks show meanwhile.
+    void setExposeShown(bool shown) noexcept;
     void addWindow(MForeignToplevel *window) noexcept;
     void removeWindow(MForeignToplevel *window) noexcept;
     void updateModel() noexcept;
@@ -146,6 +149,7 @@ private:
     std::shared_ptr<CZEventSource> m_inotifySource;
     std::vector<std::shared_ptr<CZEventSource>> m_dropReaders; // Dropped uri-lists being read
     sd_bus_slot *m_deskMatch {};
+    sd_bus_slot *m_exposeMatch {};
     std::shared_ptr<CZBus> m_bus;
 };
 
