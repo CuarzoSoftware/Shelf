@@ -208,9 +208,10 @@ void Shelf::initDeskWatch() noexcept
         "org.cuarzo.Crystals", "ExposeChanged",
         [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
             int shown { 0 };
+            const char *output {};
 
-            if (sd_bus_message_read(m, "b", &shown) >= 0 && _shelf == data)
-                static_cast<Shelf*>(data)->setExposeShown(shown);
+            if (sd_bus_message_read(m, "bs", &shown, &output) >= 0 && _shelf == data)
+                static_cast<Shelf*>(data)->setExposeShown(shown, output ? output : "");
 
             return 0;
         }, nullptr, this);
@@ -219,11 +220,13 @@ void Shelf::initDeskWatch() noexcept
     sd_bus_flush(bus->bus());
 }
 
-void Shelf::setExposeShown(bool shown) noexcept
+void Shelf::setExposeShown(bool shown, const std::string &output) noexcept
 {
+    // Only that screen's dock (hidden: every dock, in case the screen was renamed meanwhile)
     for (MScreen *s : marco->screens())
         if (auto *dock { static_cast<Dock*>(s->userData) })
-            dock->setExposeShown(shown);
+            if (!shown || s->props().name == output)
+                dock->setExposeShown(shown);
 }
 
 void Shelf::setDeskRunning(bool running) noexcept

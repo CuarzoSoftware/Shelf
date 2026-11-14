@@ -133,8 +133,9 @@ private:
     void trashFiles(const std::vector<std::filesystem::path> &paths) noexcept;
     void setDeskRunning(bool running) noexcept;
 
-    /// Crystals' Exposé shown/hidden (org.cuarzo.Crystals ExposeChanged): the docks show meanwhile.
-    void setExposeShown(bool shown) noexcept;
+    /// Crystals' Exposé shown/hidden on the output named @p output (org.cuarzo.Crystals ExposeChanged):
+    /// the dock of that screen shows meanwhile.
+    void setExposeShown(bool shown, const std::string &output) noexcept;
     void addWindow(MForeignToplevel *window) noexcept;
     void removeWindow(MForeignToplevel *window) noexcept;
     void updateModel() noexcept;
