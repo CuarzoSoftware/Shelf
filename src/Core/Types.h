@@ -23,6 +23,7 @@ constexpr Int32 DOCK_TILE_SIZE_MIN      { 16 };  // Same range as the macOS Dock
 constexpr Int32 DOCK_TILE_SIZE_MAX      { 128 };
 constexpr Int32 DOCK_SCREEN_GAP         { 4 };   // floating gap between the dock and the screen edge
 constexpr Int32 DOCK_SCREEN_SIDE_MARGIN { 8 };   // min space left on each side when the dock fills the screen width
+constexpr Int32 DOCK_TOOLTIP_SCREEN_MARGIN { 12 }; // min space between tooltips/menus and the screen's left and right edges
 
 // --- Shadow ----------------------------------------------------------------------------------
 

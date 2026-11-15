@@ -119,6 +119,9 @@ private:
     void fitToScreen() noexcept;
     Int32 dockWidth(const DockMetrics &m) const noexcept;
     Int32 availableWidth() const noexcept;
+
+    /// Logical width of the screen's current mode (0 if unknown).
+    Int32 screenWidth() const noexcept;
     void rebuildItems() noexcept;
     void syncDeskItem() noexcept;
     Int32 deskSlots() const noexcept { return m_deskItem ? 1 : 0; }
@@ -164,6 +167,10 @@ private:
     SkIRect thumbnailRect(Int32 index, Int32 count) const noexcept;
     void itemHoverChanged(DockItem &item, bool hovered) noexcept;
     void showLabel(DockItem &item) noexcept;
+
+    /// Points @p tooltip at @p item (caret at its top edge), kept DOCK_TOOLTIP_SCREEN_MARGIN away
+    /// from the screen's left and right edges.
+    void pointTooltip(MTooltip &tooltip, const AKNode &item) noexcept;
     void hideLabels() noexcept;
     void animateTo(Float64 target) noexcept;
     void setProgress(Float64 progress) noexcept;

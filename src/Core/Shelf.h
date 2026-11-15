@@ -72,6 +72,9 @@ public:
     /// Runs a command (argv) detached.
     static bool Spawn(const std::vector<std::string> &argv) noexcept;
 
+    /// Opens the home trash (`trash:///`) in the file manager.
+    static void OpenTrash() noexcept;
+
     /// Minimized windows, in the order they were minimized.
     const std::vector<MForeignToplevel*> &minimized() const noexcept { return m_minimized; }
 

@@ -29,6 +29,7 @@ Dock::Dock(MScreen &screen) noexcept :
         [this](CZAnimation *) { setProgress(m_to); }),
     m_showTimer([this](CZTimer *) { show(); })
 {
+    setBlurMaterial(MBlurMaterial::Dock);
     // The empty slot for dropped .desktop files (see openPinGap()): never takes input.
     {
         const SkRegion empty;
@@ -101,7 +102,7 @@ Dock::Dock(MScreen &screen) noexcept :
     });
     m_trash->label = []{ return std::string("Trash"); };
     setupItem(*m_trash);
-    m_trash->onClicked = []{ Shelf::Spawn({ "xdg-open", "trash:///" }); };
+    m_trash->onClicked = []{ Shelf::OpenTrash(); };
     m_trash->onContextMenu = [this](const CZPointerButtonEvent &e){
         openMenu(*m_trash, e, [this](Dock &){ buildTrashMenu(); });
     };
@@ -147,7 +148,7 @@ void Dock::setTileSize(Int32 tile) noexcept
     fitToScreen();
 }
 
-Int32 Dock::availableWidth() const noexcept
+Int32 Dock::screenWidth() const noexcept
 {
     MScreen *s { screen() };
 
@@ -161,10 +162,16 @@ Int32 Dock::availableWidth() const noexcept
             continue;
 
         const Int32 px { CZ::Is90Transform(s->props().transform) ? mode.size.height() : mode.size.width() };
-        return px / std::max(1, s->props().scale) - 2 * DOCK_SCREEN_SIDE_MARGIN;
+        return px / std::max(1, s->props().scale);
     }
 
-    return 0; // Unknown yet: no limit
+    return 0;
+}
+
+Int32 Dock::availableWidth() const noexcept
+{
+    const Int32 width { screenWidth() };
+    return width > 0 ? width - 2 * DOCK_SCREEN_SIDE_MARGIN : 0; // 0: unknown yet, no limit
 }
 
 Int32 Dock::dockWidth(const DockMetrics &m) const noexcept
@@ -1153,6 +1160,7 @@ Dock::HoverLabel::HoverLabel() noexcept
 {
     // Never takes the pointer: it would leave the dock and the item under the label.
     SkRegion empty;
+    tooltip.setBlurMaterial(MBlurMaterial::Tooltip);
     tooltip.setCustomInputRegion(&empty);
     text.setInputRegion(&empty);
     text.setFontSize(DOCK_LABEL_FONT_SIZE);
@@ -1245,10 +1253,41 @@ void Dock::showLabel(DockItem &item) noexcept
     current->item.reset(&item);
     current->text.setText(text);
 
-    // Above the item, the caret pointing at its top edge (like the context menu).
-    const SkIRect itemRect { item.worldRect() };
-    current->tooltip.pointTo(this, { itemRect.x() + itemRect.width() / 2, Int32(worldRect().y()) - 6 }, CZEdgeBottom);
+    pointTooltip(current->tooltip, item);
     current->tooltip.setMapped(true);
+}
+
+void Dock::pointTooltip(MTooltip &tooltip, const AKNode &item) noexcept
+{
+    // Above the item, the caret pointing at its top edge (a little above the dock).
+    const SkIRect itemRect { item.worldRect() };
+    const SkIPoint target { itemRect.x() + itemRect.width() / 2, Int32(worldRect().y()) - 6 };
+    tooltip.pointTo(this, target, CZEdgeBottom);
+
+    // The compositor only slides it fully inside the screen: shift it ourselves so it keeps a
+    // margin. The caret keeps pointing at the target (the anchor), wherever the popup ends up.
+    const Int32 screenW { screenWidth() };
+
+    if (screenW <= 0)
+        return;
+
+    tooltip.scene().root()->layout().calculate();
+    const Int32 width { Int32(tooltip.layout().calculatedWidth()) };
+    constexpr Int32 margin { DOCK_TOOLTIP_SCREEN_MARGIN };
+
+    if (width <= 0 || width > screenW - 2 * margin)
+        return; // Doesn't fit with margins: left to the compositor
+
+    // Centered on the target, in screen coordinates (the dock is centered horizontally).
+    const Int32 left { (screenW - surfaceSize().width()) / 2 + target.x() - width / 2 };
+    Int32 dx { 0 };
+
+    if (left < margin)
+        dx = margin - left;
+    else if (left + width > screenW - margin)
+        dx = screenW - margin - (left + width);
+
+    tooltip.setOffset(dx, 0);
 }
 
 void Dock::hideLabels() noexcept
@@ -1283,11 +1322,7 @@ void Dock::openMenu(AKNode &item, const CZPointerButtonEvent &event, const MenuB
     m_menuView->onItemActivated.subscribe(m_menuView.get(), [this](MMenuItem *){ closeMenu(); });
     build(*this);
 
-    // Above the item, the caret pointing at its top edge (a little above the dock).
-    const SkIRect itemRect { item.worldRect() };
-    const SkIPoint target { itemRect.x() + itemRect.width() / 2, Int32(worldRect().y()) - 6 };
-
-    m_menu->pointTo(this, target, CZEdgeBottom);
+    pointTooltip(*m_menu, item);
     m_menu->setGrab(&event);
     m_menu->setMapped(true);
 }
@@ -1416,7 +1451,7 @@ void Dock::buildTrashMenu() noexcept
     std::error_code ec;
     const bool empty { trash.empty() || !fs::is_directory(trash / "files", ec) || fs::is_empty(trash / "files", ec) };
 
-    addMenuAction("Open", []{ Shelf::Spawn({ "xdg-open", "trash:///" }); });
+    addMenuAction("Open", []{ Shelf::OpenTrash(); });
     addMenuDivider();
     addMenuAction("Empty Trash", [trash]{
         // Remove every trashed item and its .trashinfo (and expunged leftovers).

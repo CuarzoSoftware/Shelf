@@ -553,3 +553,10 @@ bool Shelf::Spawn(const std::vector<std::string> &args) noexcept
     // Detached, started from a background thread: never blocks the UI
     return CZProcess::SpawnDetached(args);
 }
+
+void Shelf::OpenTrash() noexcept
+{
+    // Not xdg-open: there's usually no x-scheme-handler/trash, so it falls back to the web browser.
+    // GIO resolves trash:/// through GVfs (inode/directory), which opens the default file manager.
+    Spawn({ "gio", "open", "trash:///" });
+}
