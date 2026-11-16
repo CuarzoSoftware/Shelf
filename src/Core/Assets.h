@@ -3,7 +3,6 @@
 
 #include <Core/Types.h>
 #include <CZ/Core/CZColorScheme.h>
-#include <CZ/Ream/DRM/RDRMFormat.h>
 #include <CZ/skia/core/SkRect.h>
 #include <map>
 #include <memory>
@@ -13,8 +12,9 @@
 #include <vector>
 #include <filesystem>
 #include <CZ/AK/Nodes/AKImageFrame.h>
+#include <CZ/AssetBroker/ABIconKey.h>
 
-namespace CZ { class RImage; }
+namespace CZ { class RImage; class ABCore; }
 
 /**
  * @brief Generated (and cached) images and icons shared by every dock.
@@ -67,9 +67,8 @@ public:
     /**
      * @brief @p icon (loaded by this class) again, at @p pixels for a screen with scale @p scale.
      *
-     * SVGs are rendered again at that size. Raster themed icons are looked up again for that size
-     * and scale (scaled, antialiased, only if the theme has no such size). Other files
-     * are loaded again at that size. Cached. Returns @p icon itself if it's not known.
+     * Rendered again from the same file at that size (through the AssetBroker: shared with other
+     * apps if the service is running). Returns @p icon itself if it's not known.
      */
     std::shared_ptr<RImage> sized(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept;
 
@@ -88,28 +87,28 @@ public:
 private:
     /// First themed icon found among @p names (cached, including misses).
     std::shared_ptr<RImage> themedIcon(const std::vector<std::string> &names) noexcept;
-    std::shared_ptr<RImage> loadIcon(const std::string &name) noexcept;
-    std::string desktopEntryIcon(const std::string &appId) noexcept;
+
+    /// Dock icon lookup (DOCK_ICON_THEME first, at DOCK_ICON_LOAD_SIZE).
+    static ABIconKey iconKey(std::vector<std::string> names, const std::string &appId = {}) noexcept;
+
+    /// Loads @p key at DOCK_ICON_LOAD_SIZE, remembering it to load it at other sizes (see sized()).
+    std::shared_ptr<RImage> load(const ABIconKey &key) noexcept;
 
     using Key = std::tuple<Int32, CZColorScheme, Int32, Int32, Int32, Int32, Int32, Int32>;
     std::map<Key, DockFrame> m_dockFrames;
     std::shared_ptr<RImage> m_dividerImage;
+    std::shared_ptr<ABCore> m_ab;
+    std::unordered_map<std::string, std::shared_ptr<RImage>> m_icons;    // By icon names
+    std::unordered_map<std::string, std::shared_ptr<RImage>> m_appIcons; // By app id
 
-    RDRMFormat m_format { 0, {} };
-    std::unordered_map<std::string, std::shared_ptr<RImage>> m_icons;    // by icon name
-    std::unordered_map<std::string, std::shared_ptr<RImage>> m_appIcons; // by app id
-
-    std::shared_ptr<RImage> loadFile(const std::filesystem::path &path, const std::string &iconName = {}) noexcept;
-
-    // Where each loaded icon comes from (to load it at other sizes).
+    // Where each loaded icon comes from (to load it at other sizes)
     struct Source
     {
         std::weak_ptr<RImage> image;
-        std::string iconName;       ///< Themed icon (looked up again per size and scale)
-        std::filesystem::path path; ///< Otherwise, the file
+        ABIconKey key;
     };
+
     std::unordered_map<const RImage*, Source> m_sources;
-    std::map<std::tuple<std::string, Int32, Int32>, std::shared_ptr<RImage>> m_sized; // By source, size and scale
 
     struct Shadowed
     {

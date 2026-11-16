@@ -11,9 +11,7 @@
 #include <cmath>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
-#include <CZ/XDG/XDGKit.h>
-#include <CZ/XDG/XDGDesktopEntry.h>
-#include <drm_fourcc.h>
+#include <CZ/AssetBroker/ABCore.h>
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -23,52 +21,42 @@ namespace fs = std::filesystem;
 
 void Assets::init() noexcept
 {
-    auto ream { RCore::Get() };
-    const auto &formats { ream->mainDevice()->textureFormats().formats() };
-    auto fmt { formats.find(DRM_FORMAT_ABGR8888) };
+    // Uses the cz-asset-broker service if it's running (icons shared with other apps as DMA-bufs,
+    // looked up and rasterized once), otherwise loads them here
+    m_ab = ABCore::GetOrMake();
 
-    if (fmt != formats.end())
-        m_format = *fmt;
-    else
-        Log(CZError, CZLN, "ABGR8888 isn't a texture format of the main device: icons won't load");
+    if (!m_ab)
+    {
+        Log(CZError, CZLN, "Failed to create the ABCore: icons won't load");
+        return;
+    }
+
+    // Local lookups reuse Shelf's XDGKit (also used for .desktop entries)
+    m_ab->setXDGKit(GetShelf()->xdgkit);
+    Log(CZInfo, CZLN, "Icons from {}", m_ab->remote() ? "the asset broker service" : "this process");
 }
 
-std::shared_ptr<RImage> Assets::loadIcon(const std::string &name) noexcept
+ABIconKey Assets::iconKey(std::vector<std::string> names, const std::string &appId) noexcept
 {
-    auto &xdgkit { GetShelf()->xdgkit };
-
-    if (name.empty() || !xdgkit || m_format.format() == 0)
-        return {};
-
-    // Absolute paths are allowed in .desktop Icon keys.
-    if (name.front() == '/')
-        return loadFile(name);
-
-    const auto *icon { xdgkit->iconThemeManager().findIcon(
-        name, DOCK_ICON_LOAD_SIZE, 1, XDGIcon::PNG | XDGIcon::SVG, { DOCK_ICON_THEME, "" }) };
-
-    if (!icon)
-        return {};
-
-    std::shared_ptr<RImage> image;
-
-    if (icon->extensions() & XDGIcon::SVG)
-        image = loadFile(icon->getPath(XDGIcon::SVG), name);
-
-    if (!image && (icon->extensions() & XDGIcon::PNG))
-        image = loadFile(icon->getPath(XDGIcon::PNG), name);
-
-    return image;
+    ABIconKey key;
+    key.names = std::move(names);
+    key.appId = appId;
+    key.size = DOCK_ICON_LOAD_SIZE;
+    key.themes = { DOCK_ICON_THEME, "" };
+    return key;
 }
 
-std::shared_ptr<RImage> Assets::loadFile(const std::filesystem::path &path, const std::string &iconName) noexcept
+std::shared_ptr<RImage> Assets::load(const ABIconKey &key) noexcept
 {
-    auto image { RImage::LoadFile(path, m_format, { DOCK_ICON_LOAD_SIZE, DOCK_ICON_LOAD_SIZE }) };
+    if (!m_ab)
+        return {};
+
+    auto image { m_ab->icon(key, { DOCK_ICON_LOAD_SIZE, DOCK_ICON_LOAD_SIZE }) };
 
     if (image)
     {
         std::erase_if(m_sources, [](const auto &pair){ return pair.second.image.expired(); });
-        m_sources[image.get()] = { image, iconName, path };
+        m_sources[image.get()] = { image, key };
     }
 
     return image;
@@ -76,39 +64,21 @@ std::shared_ptr<RImage> Assets::loadFile(const std::filesystem::path &path, cons
 
 std::shared_ptr<RImage> Assets::sized(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept
 {
-    if (!icon)
-        return {};
+    CZ_UNUSED(scale) // pixels are already physical: the same artwork for every scale
+
+    if (!icon || !m_ab)
+        return icon;
 
     auto src { m_sources.find(icon.get()) };
 
     if (src == m_sources.end() || src->second.image.expired())
         return icon;
 
-    const Source &source { src->second };
-    scale = std::max(1, scale);
-    const std::tuple<std::string, Int32, Int32> key { source.iconName.empty() ? source.path.string() : "icon:" + source.iconName, pixels, scale };
-
-    if (auto it { m_sized.find(key) }; it != m_sized.end())
-        return it->second;
-
-    // An SVG is rendered again at that size (the same file: other sizes of a theme may be different
-    // artwork, e.g. padded for panels). A raster themed icon: the theme's file for that size and
-    // scale (only scaled, antialiased, if the theme doesn't have that size).
-    std::filesystem::path path { source.path };
-    auto &xdgkit { GetShelf()->xdgkit };
-
-    if (!source.iconName.empty() && source.path.extension() != ".svg" && xdgkit)
-        if (const auto *found { xdgkit->iconThemeManager().findIcon(source.iconName, std::max(1, (pixels + scale - 1) / scale), scale,
-                                                                    XDGIcon::PNG | XDGIcon::SVG, { DOCK_ICON_THEME, "" }) })
-            path = found->getPath((found->extensions() & XDGIcon::SVG) ? XDGIcon::SVG : XDGIcon::PNG);
-
-    auto image { RImage::LoadFile(path, m_format, { pixels, pixels }) };
-
-    if (!image)
-        image = icon;
-
-    m_sized[key] = image;
-    return image;
+    // Same lookup (so an SVG is rendered again from the same file: other sizes of a theme may be
+    // different artwork, e.g. padded for panels), fitted in the new size. Shared and cached by the
+    // ABCore (and the service).
+    auto image { m_ab->icon(src->second.key, { std::max(1, pixels), std::max(1, pixels) }) };
+    return image ? image : icon;
 }
 
 AKImageFrame::ImageProvider Assets::provider(std::shared_ptr<RImage> icon) noexcept
@@ -121,25 +91,18 @@ AKImageFrame::ImageProvider Assets::provider(std::shared_ptr<RImage> icon) noexc
 
 std::shared_ptr<RImage> Assets::themedIcon(const std::vector<std::string> &names) noexcept
 {
+    std::string cacheKey;
+
     for (const auto &name : names)
-    {
-        auto it { m_icons.find(name) };
+        cacheKey.append(name).push_back('\n');
 
-        if (it == m_icons.end())
-            it = m_icons.emplace(name, loadIcon(name)).first;
+    if (auto it { m_icons.find(cacheKey) }; it != m_icons.end())
+        return it->second;
 
-        if (it->second)
-            return it->second;
-    }
-
-    return {};
-}
-
-std::string Assets::desktopEntryIcon(const std::string &appId) noexcept
-{
-    auto &xdgkit { GetShelf()->xdgkit };
-    auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
-    return entry ? entry->icon : std::string {};
+    // One lookup with fallbacks (cached, including misses)
+    auto image { load(iconKey(names)) };
+    m_icons[cacheKey] = image;
+    return image;
 }
 
 std::shared_ptr<RImage> Assets::appIcon(const std::string &appId) noexcept
@@ -147,10 +110,9 @@ std::shared_ptr<RImage> Assets::appIcon(const std::string &appId) noexcept
     if (auto it { m_appIcons.find(appId) }; it != m_appIcons.end())
         return it->second;
 
+    // The Icon of the app's .desktop entry (resolved by the service in remote mode), else the
+    // app id itself as an icon name, else the generic app icon
     std::vector<std::string> names;
-
-    if (auto icon { desktopEntryIcon(appId) }; !icon.empty())
-        names.emplace_back(icon);
 
     if (!appId.empty())
         names.emplace_back(appId);
@@ -158,7 +120,7 @@ std::shared_ptr<RImage> Assets::appIcon(const std::string &appId) noexcept
     names.emplace_back("application-default-icon");
     names.emplace_back("application-x-executable");
 
-    auto image { themedIcon(names) };
+    auto image { load(iconKey(std::move(names), appId)) };
 
     if (!image)
         Log(CZWarning, CZLN, "No icon found for app id '{}'", appId);
