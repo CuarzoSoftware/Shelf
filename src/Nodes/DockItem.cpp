@@ -73,6 +73,9 @@ void DockItem::setItemScale(SkScalar scale) noexcept
 
     m_scale = scale;
     applySize();
+
+    if (onScaleChanged)
+        onScaleChanged();
 }
 
 void DockItem::animateItemScale(SkScalar target, std::function<void()> done) noexcept
@@ -91,6 +94,11 @@ void DockItem::applySize() noexcept
     const SkScalar tile { m.tile * m_scale };
     layout().setWidth(tile);
     layout().setHeight(tile);
+    icon.setShadowMargin(DockIcon::MarginFor(m.tile));
+
+    // The gap next to it grows with it too (a collapsed item takes no room at all): it takes
+    // itemScale() * (tile + spacing), see Dock::itemsWidth()
+    layout().setMargin(YGEdgeRight, -(1.f - m_scale) * m.spacing);
 
     // The badge covers ~45% of the tile, like the app icon on a minimized window in the macOS Dock.
     const SkScalar badgeSize { tile * 0.45f };
@@ -98,11 +106,11 @@ void DockItem::applySize() noexcept
     badge.layout().setHeight(badgeSize);
 
     // A small dot centered in the bottom padding.
-    const Int32 dot { std::max(3, (m.tile * 4 + DOCK_TILE_SIZE_DEFAULT / 2) / DOCK_TILE_SIZE_DEFAULT) };
+    const Int32 dot { std::max(3, Int32(std::lround(m.tile * 4.f / DOCK_TILE_SIZE_DEFAULT))) };
     indicator.layout().setWidth(dot);
     indicator.layout().setHeight(dot);
-    indicator.layout().setPosition(YGEdgeLeft, (m.tile - dot) / 2);
-    indicator.layout().setPosition(YGEdgeTop, m.tile + std::max(0, (m.paddingBottom - dot) / 2));
+    indicator.layout().setPosition(YGEdgeLeft, std::round((m.tile - dot) / 2.f));
+    indicator.layout().setPosition(YGEdgeTop, std::round(m.tile + std::max(0.f, (m.paddingBottom - dot) / 2.f)));
     indicator.setBorderRadius(CZBorderRadius::Make(dot / 2));
 }
 

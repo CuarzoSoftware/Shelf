@@ -45,7 +45,7 @@ void DockDivider::pointerButtonEvent(const CZPointerButtonEvent &event)
     {
         m_dragging = true;
         m_dragStartFromBottom = pointerFromBottom();
-        m_dragStartTile = m_dock.metrics().tile;
+        m_dragStartTile = Int32(std::lround(m_dock.metrics().tile));
         m_resized = false;
 
         // Keep getting the motion while the pointer leaves the divider (or the dock).

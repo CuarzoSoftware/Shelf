@@ -1,4 +1,5 @@
 #include <Nodes/DockFrame.h>
+#include <cmath>
 #include <Core/Shelf.h>
 
 DockFrame::DockFrame() noexcept : MDecorations()
@@ -27,7 +28,7 @@ void DockFrame::onBind() noexcept
 void DockFrame::setDockGeometry(Int32 height, Int32 radius) noexcept
 {
     const SkIRect base { BaseMargins() };
-    const Int32 headroom { std::max(0, DockMetrics::Make(DOCK_TILE_SIZE_MAX).height - height) };
+    const Int32 headroom { std::max(0, Int32(std::lround(DockMetrics::Make(DOCK_TILE_SIZE_MAX).height)) - height) };
     setMargins({ base.fLeft, base.fTop + headroom, base.fRight, base.fBottom });
 
     // The 9-patch covers the dock rect and its base margins, at the bottom of the decorations

@@ -88,5 +88,6 @@ void DropFly::update(Float64 t) noexcept
 
     layout().setWidth(std::max(1, lerp(m_from.width(), to.width())));
     layout().setHeight(std::max(1, lerp(m_from.height(), to.height())));
+    m_icon.setShadowMargin(DockIcon::MarginFor(std::max(1, lerp(m_from.width(), to.width()))));
     setPos(lerp(m_from.x(), to.x()), lerp(m_from.y(), to.y()));
 }

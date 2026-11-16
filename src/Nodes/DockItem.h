@@ -26,6 +26,9 @@ public:
     void setItemScale(SkScalar scale) noexcept;
     SkScalar itemScale() const noexcept { return m_scale; }
 
+    /// Invoked when itemScale() changes (the dock refits its tile size, see Dock::fitToScreen()).
+    std::function<void()> onScaleChanged;
+
     /// Animates itemScale() to @p target, then invokes @p done.
     void animateItemScale(SkScalar target, std::function<void()> done = nullptr) noexcept;
 

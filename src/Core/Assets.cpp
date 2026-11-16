@@ -183,22 +183,24 @@ float Assets::ShadowMargin() noexcept
     return DOCK_ICON_SHADOW_RADIUS / SkScalar(DOCK_TILE_SIZE_DEFAULT);
 }
 
-std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept
+std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 iconPixels, Int32 scale) noexcept
 {
     if (!icon)
         return {};
 
     pixels = std::max(pixels, 8);
+    iconPixels = std::clamp(iconPixels, 1, pixels);
 
-    if (auto it { m_shadowed.find({ icon.get(), pixels, scale }) }; it != m_shadowed.end() && !it->second.icon.expired())
+    if (auto it { m_shadowed.find({ icon.get(), pixels, iconPixels, scale }) }; it != m_shadowed.end() && !it->second.icon.expired())
         return it->second.image;
 
     std::erase_if(m_shadowed, [](const auto &pair){ return pair.second.icon.expired(); });
 
     // The image covers the icon plus the shadow margin on each side, in pixels (scale 1): the icon
-    // is drawn at its exact size (never resampled).
-    const Int32 size { std::max(1, Int32(std::floor(SkScalar(pixels) / (1.f + 2.f * ShadowMargin())))) };
-    const SkScalar margin { (pixels - size) / 2.f };
+    // is drawn at its exact size (never resampled), at a whole pixel offset (a half pixel one would
+    // blur it, noticeable at scale 1).
+    const Int32 size { iconPixels };
+    const SkScalar margin { SkScalar((pixels - size) / 2) };
     const SkScalar ratio { SkScalar(size) / SkScalar(DOCK_TILE_SIZE_DEFAULT) };
     const SkScalar sigma { DOCK_ICON_SHADOW_RADIUS * ratio / 3.f };
     const SkScalar dy { DOCK_ICON_SHADOW_OFFSET_Y * ratio };
@@ -226,7 +228,7 @@ std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon
     }
 
     auto image { surface->image() };
-    m_shadowed[{ icon.get(), pixels, scale }] = { icon, image };
+    m_shadowed[{ icon.get(), pixels, iconPixels, scale }] = { icon, image };
     return image;
 }
 

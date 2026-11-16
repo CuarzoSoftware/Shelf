@@ -88,6 +88,7 @@ void LaunchBounce::updatePosition() noexcept
         return;
     layout().setWidth(rect.width());
     layout().setHeight(rect.height());
+    m_icon.setShadowMargin(m_item->icon.shadowMargin());
     setPos(rect.x(), rect.y() - Int32(std::lround(m_height)));
     setMapped(!m_finished);
 }

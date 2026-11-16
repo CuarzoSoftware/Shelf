@@ -58,10 +58,11 @@ public:
     /**
      * @brief @p icon with its drop shadow, pre-rendered @p pixels wide/tall (cached per icon and size).
      *
-     * The icon (loaded again at its exact size, see sized()) fills the middle, with a
-     * ShadowMargin() border (fraction of the icon size) on every side for the shadow.
+     * The icon (loaded again at its exact size, see sized()) is @p iconPixels wide/tall, in the
+     * middle: the border around it (for the shadow) is a whole number of pixels, so the icon stays
+     * on the pixel grid (sharp) when the image is drawn 1:1. See DockIcon.
      */
-    std::shared_ptr<RImage> shadowedIcon(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 scale) noexcept;
+    std::shared_ptr<RImage> shadowedIcon(const std::shared_ptr<RImage> &icon, Int32 pixels, Int32 iconPixels, Int32 scale) noexcept;
 
     /**
      * @brief @p icon (loaded by this class) again, at @p pixels for a screen with scale @p scale.
@@ -116,7 +117,7 @@ private:
         std::shared_ptr<RImage> image;
     };
 
-    std::map<std::tuple<const RImage*, Int32, Int32>, Shadowed> m_shadowed; // By icon, size and scale
+    std::map<std::tuple<const RImage*, Int32, Int32, Int32>, Shadowed> m_shadowed; // By icon, size, icon size and scale
 };
 
 #endif // ASSETS_H

@@ -117,7 +117,13 @@ protected:
 private:
     void applyMetrics() noexcept;
     void fitToScreen() noexcept;
-    Int32 dockWidth(const DockMetrics &m) const noexcept;
+    /// Items in the apps row and in the minimized windows + trash row: as shown now (growing and
+    /// shrinking ones by their scale), or once their animations end (@p final).
+    void itemCounts(bool final, SkScalar &apps, SkScalar &others) const noexcept;
+    static SkScalar itemsWidth(const DockMetrics &m, SkScalar apps, SkScalar others) noexcept;
+
+    /// The tile size the dock fits the screen with (up to the preferred one), see fitToScreen().
+    SkScalar fitTile(SkScalar apps, SkScalar others) const noexcept;
     Int32 availableWidth() const noexcept;
 
     /// Logical width of the screen's current mode (0 if unknown).
@@ -156,6 +162,7 @@ private:
     void closePinGap(bool animated) noexcept;
     void placePinGap() noexcept;
     void setPinGapProgress(SkScalar progress) noexcept;
+    void sizePinGap() noexcept;
     AKContainer m_pinGap { YGFlexDirectionRow, false };
     CZLinearAnimation m_pinGapAnim;
     SkScalar m_pinGapProgress { 0.f }, m_pinGapFrom { 0.f }, m_pinGapTo { 0.f };

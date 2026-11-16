@@ -492,7 +492,7 @@ void Shelf::setAutoHide(bool enabled) noexcept
 
 void Shelf::setTileSize(Int32 tile) noexcept
 {
-    tile = DockMetrics::Make(tile).tile;
+    tile = DockMetrics::ClampTile(tile);
 
     if (settings.tileSize != tile)
     {

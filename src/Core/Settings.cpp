@@ -65,7 +65,7 @@ void Settings::load() noexcept
         char *end {};
         const long value { std::strtol(it->second.c_str(), &end, 10) };
         if (end != it->second.c_str())
-            tileSize = DockMetrics::Make(Int32(value)).tile; // clamped to the valid range
+            tileSize = DockMetrics::ClampTile(Int32(value)); // clamped to the valid range
     }
 
     Log(CZInfo, CZLN, "Loaded {} pinned app(s) from {}", pinnedApps.size(), path.string());

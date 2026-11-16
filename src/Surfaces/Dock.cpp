@@ -144,7 +144,7 @@ Dock::Dock(MScreen &screen) noexcept :
 
 void Dock::setTileSize(Int32 tile) noexcept
 {
-    m_preferredTile = DockMetrics::Make(tile).tile;
+    m_preferredTile = DockMetrics::ClampTile(tile);
     fitToScreen();
 }
 
@@ -174,30 +174,59 @@ Int32 Dock::availableWidth() const noexcept
     return width > 0 ? width - 2 * DOCK_SCREEN_SIDE_MARGIN : 0; // 0: unknown yet, no limit
 }
 
-Int32 Dock::dockWidth(const DockMetrics &m) const noexcept
+void Dock::itemCounts(bool final, SkScalar &apps, SkScalar &others) const noexcept
+{
+    // Growing/shrinking items count by their scale (see DockItem::applySize()), the pin slot by its
+    // progress: the width follows them as they animate
+    apps = SkScalar(m_appItems.size() + deskSlots());
+
+    if (m_pinGapOpen && !final)
+        apps += m_pinGapProgress;
+
+    others = 1.f; // The trash
+
+    for (const auto &item : m_minimizedItems)
+        others += final ? (item->removing ? 0.f : 1.f) : item->itemScale();
+}
+
+SkScalar Dock::itemsWidth(const DockMetrics &m, SkScalar apps, SkScalar others) noexcept
 {
     // Mirrors the layout: [padding][apps][gap][divider][gap][minimized windows + trash][padding]
-    const auto row { [&m](Int32 n) { return n > 0 ? n * m.tile + (n - 1) * m.spacing : 0; } };
-    const Int32 apps { row(Int32(m_appItems.size()) + deskSlots()) };
-    const Int32 others { row(Int32(m_minimizedItems.size()) + 1) };
-    const Int32 width { 2 * m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + others };
-    return std::max(width, m.minWidth);
+    const auto row { [&m](SkScalar n) { return std::max(0.f, n * m.tile + (n - 1.f) * m.spacing); } };
+    return 2 * m.paddingSide + row(apps) + m.spacing + m.dividerSlot + m.spacing + row(others);
+}
+
+SkScalar Dock::fitTile(SkScalar apps, SkScalar others) const noexcept
+{
+    // The largest size up to the preferred one that fits. Everything scales with the tile size, so
+    // does the width: the one that fits exactly is found right away (fractional)
+    const Int32 available { availableWidth() };
+    const SkScalar preferred { SkScalar(m_preferredTile) };
+
+    if (available <= 0)
+        return preferred;
+
+    const SkScalar atDefault { itemsWidth(DockMetrics::Make(DOCK_TILE_SIZE_DEFAULT), apps, others) };
+
+    if (atDefault <= 0.f)
+        return preferred;
+
+    const SkScalar fits { DOCK_TILE_SIZE_DEFAULT * SkScalar(available) / atDefault };
+    return std::clamp(std::min(preferred, fits), SkScalar(DOCK_TILE_SIZE_MIN), preferred);
 }
 
 void Dock::fitToScreen() noexcept
 {
-    // The largest size up to the preferred one that fits.
-    const Int32 available { availableWidth() };
-    DockMetrics metrics { DockMetrics::Make(m_preferredTile) };
+    // Called on every step of the items growing/shrinking too: a dock as wide as the screen keeps
+    // its width meanwhile, its icons shrinking/growing smoothly
+    SkScalar appsCount, othersCount;
+    itemCounts(false, appsCount, othersCount);
+    const SkScalar tile { fitTile(appsCount, othersCount) };
 
-    if (available > 0)
-        while (metrics.tile > DOCK_TILE_SIZE_MIN && dockWidth(metrics) > available)
-            metrics = DockMetrics::Make(metrics.tile - 1);
-
-    if (metrics.tile == m_metrics.tile)
+    if (std::fabs(tile - m_metrics.tile) < 0.001f)
         return;
 
-    m_metrics = metrics;
+    m_metrics = DockMetrics::Make(tile);
     applyMetrics();
     updateExclusiveZone();
     setProgress(m_progress); // The hidden/shown margins depend on the height
@@ -227,14 +256,17 @@ void Dock::applyMetrics() noexcept
         m_deskItem->setMetrics(m);
 
     divider.setMetrics(m);
-    setBorderRadius(CZBorderRadius::Make(m.radius));
+    setBorderRadius(CZBorderRadius::Make(Int32(std::lround(m.radius))));
 
     // Never narrower than the 9-patch frame can draw without its corners/shadows overlapping
     // (e.g. no apps running and nothing pinned). The items stay centered.
     layout().setMinWidth(m.minWidth);
 
     if (auto *frame { static_cast<DockFrame*>(decorations()) })
-        frame->setDockGeometry(m.height, m.radius);
+        frame->setDockGeometry(Int32(std::lround(m.height)), Int32(std::lround(m.radius)));
+
+    if (m_pinGapOpen)
+        sizePinGap();
 
     updateInputRegion();
     updateHitAreas();
@@ -373,6 +405,7 @@ void Dock::rebuildItems() noexcept
 
         item->setMetrics(m_metrics);
         item->setItemScale(0.f);
+        item->onScaleChanged = [this]{ fitToScreen(); };
         item->insertBefore(m_trash.get());
         item->animateItemScale(1.f);
         m_minimizedItems.emplace_back(std::move(item));
@@ -408,7 +441,7 @@ Int32 Dock::shownMargin() const noexcept
 
 Int32 Dock::hiddenMargin() const noexcept
 {
-    return -(m_metrics.height + DockFrame::BaseMargins().fBottom - DOCK_HIDDEN_VISIBLE);
+    return -(Int32(std::lround(m_metrics.height)) + DockFrame::BaseMargins().fBottom - DOCK_HIDDEN_VISIBLE);
 }
 
 void Dock::updateInputRegion() noexcept
@@ -418,7 +451,7 @@ void Dock::updateInputRegion() noexcept
     auto *frame { static_cast<DockFrame*>(decorations()) };
     const SkIRect m { frame ? frame->margins() : DockFrame::BaseMargins() };
     const Int32 width { std::max(1, Int32(layout().calculatedWidth())) };
-    SkRegion region { SkIRect::MakeXYWH(m.fLeft, m.fTop, width, m_metrics.height + m.fBottom) };
+    SkRegion region { SkIRect::MakeXYWH(m.fLeft, m.fTop, width, Int32(std::lround(m_metrics.height)) + m.fBottom) };
     setCustomInputRegion(&region);
 }
 
@@ -430,8 +463,11 @@ void Dock::updateHitAreas() noexcept
     // icons, down to the bottom of the surface (below the screen edge while shown).
     const DockMetrics &m { m_metrics };
     auto *frame { static_cast<DockFrame*>(decorations()) };
-    const Int32 below { m.paddingBottom + (frame ? frame->margins().fBottom : DockFrame::BaseMargins().fBottom) };
-    const Int32 half { m.spacing / 2 };
+    const Int32 below { Int32(std::ceil(m.paddingBottom)) + (frame ? frame->margins().fBottom : DockFrame::BaseMargins().fBottom) };
+    const Int32 spacing { Int32(std::ceil(m.spacing)) };
+    const Int32 paddingSide { Int32(std::ceil(m.paddingSide)) };
+    const Int32 paddingTop { Int32(std::ceil(m.paddingTop)) };
+    const Int32 half { spacing / 2 };
 
     for (AKContainer *group : { &apps, &others })
     {
@@ -444,9 +480,9 @@ void Dock::updateHitAreas() noexcept
         for (size_t i = 0; i < list.size(); i++)
         {
             const bool first { i == 0 }, last { i + 1 == list.size() };
-            const Int32 left { first ? (group == &apps ? m.paddingSide : m.spacing) : half };
-            const Int32 right { last ? (group == &apps ? m.spacing : m.paddingSide) : m.spacing - half };
-            list[i]->setHitExtents(left, m.paddingTop, right, below);
+            const Int32 left { first ? (group == &apps ? paddingSide : spacing) : half };
+            const Int32 right { last ? (group == &apps ? spacing : paddingSide) : spacing - half };
+            list[i]->setHitExtents(left, paddingTop, right, below);
         }
     }
 }
@@ -458,7 +494,7 @@ void Dock::updateExclusiveZone() noexcept
     if (m_autoHide)
         setExclusiveZone(0);
     else
-        setExclusiveZone(m_metrics.height + DockFrame::BaseMargins().fBottom);
+        setExclusiveZone(Int32(std::ceil(m_metrics.height)) + DockFrame::BaseMargins().fBottom);
 }
 
 void Dock::setAutoHide(bool enabled) noexcept
@@ -510,7 +546,7 @@ void Dock::dividerDragEnded(bool resized) noexcept
     // Keep the final size (saved, and applied to the docks on the other screens too). Dragging past
     // the screen width is capped, so the size actually reached is what's kept.
     if (resized)
-        GetShelf()->setTileSize(m_metrics.tile);
+        GetShelf()->setTileSize(Int32(std::lround(m_metrics.tile)));
 
     // The pointer may have been released outside the dock: hide now that the drag is over.
     // An auto-hiding dock stays up until the app lands (the flight is drawn relative to it).
@@ -636,23 +672,31 @@ SkIRect Dock::thumbnailRect(Int32 index, Int32 count) const noexcept
     /*
      * Where minimized item `index` (of `count`) will be once fully grown and the dock has
      * re-centered, in this surface's current coordinates. The compositor animates the window
-     * towards it while the item may still be growing. Mirrors the layout, like dockWidth().
+     * towards it while the item may still be growing. Mirrors the layout, like itemsWidth(), with
+     * the tile size it'll have then (smaller if the dock is as wide as the screen, see fitToScreen()).
      */
-    const DockMetrics &m { m_metrics };
-    const auto row { [&m](Int32 n) { return n > 0 ? n * m.tile + (n - 1) * m.spacing : 0; } };
+    SkScalar appsCount, othersCount;
+    itemCounts(true, appsCount, othersCount);
+    othersCount = SkScalar(count + 1);
+    const DockMetrics m { DockMetrics::Make(fitTile(appsCount, othersCount)) };
+    const auto row { [&m](SkScalar n) { return std::max(0.f, n * m.tile + (n - 1.f) * m.spacing); } };
 
-    const Int32 apps { row(Int32(m_appItems.size()) + deskSlots()) };
-    const Int32 itemsWidth { 2 * m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + row(count + 1) };
-    const Int32 dockWidth { std::max(itemsWidth, m.minWidth) };
+    const SkScalar apps { row(appsCount) };
+    const SkScalar width { itemsWidth(m, appsCount, othersCount) };
+    const SkScalar dockWidth { std::max(width, m.minWidth) };
 
     // Left of the item inside the (final) dock rect; the items are centered in it.
-    const Int32 x { (dockWidth - itemsWidth) / 2 + m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + index * (m.tile + m.spacing) };
+    const SkScalar x { (dockWidth - width) / 2 + m.paddingSide + apps + m.spacing + m.dividerSlot + m.spacing + index * (m.tile + m.spacing) };
 
     // The surface is centered on the screen: when its width changes it moves by half the change.
+    // Its height doesn't change (see DockFrame::setDockGeometry()): the dock rect's top moves by
+    // the change of its height.
     const SkIRect &frame { worldRect() }; // The dock rect, in surface coordinates
-    const Int32 shift { (frame.width() - dockWidth) / 2 };
+    const SkScalar shift { (frame.width() - dockWidth) / 2 };
+    const SkScalar top { frame.y() + std::round(m_metrics.height) - std::round(m.height) + m.paddingTop };
+    const Int32 tile { Int32(std::lround(m.tile)) };
 
-    return SkIRect::MakeXYWH(frame.x() + shift + x, frame.y() + m.paddingTop, m.tile, m.tile);
+    return SkIRect::MakeXYWH(Int32(std::lround(frame.x() + shift + x)), Int32(std::lround(top)), tile, tile);
 }
 
 /* ------------------------------------ Reordering (DND) ------------------------------------ */
@@ -704,19 +748,21 @@ void Dock::startDrag(DockItem &item, const CZPointerButtonEvent &press) noexcept
 
     // The icon under the pointer exactly where it was grabbed, with its shadow: the drag surface
     // extends past the icon by the shadow's margin (DockIcon draws it outside its node).
-    m_dndPad = Int32(std::ceil(SkScalar(m_metrics.tile) * Assets::ShadowMargin()));
+    const Int32 tile { Int32(std::lround(m_metrics.tile)) };
+    m_dndPad = DockIcon::MarginFor(tile);
+    m_dndIcon->setShadowMargin(m_dndPad);
     m_dndIcon->setImage(GetShelf()->assets.appIcon(appId));
     m_dndIcon->layout().setPosition(YGEdgeLeft, m_dndPad);
     m_dndIcon->layout().setPosition(YGEdgeTop, m_dndPad);
-    m_dndIcon->layout().setWidth(m_metrics.tile);
-    m_dndIcon->layout().setHeight(m_metrics.tile);
-    m_dnd->layout().setWidth(m_metrics.tile + 2 * m_dndPad);
-    m_dnd->layout().setHeight(m_metrics.tile + 2 * m_dndPad);
+    m_dndIcon->layout().setWidth(tile);
+    m_dndIcon->layout().setHeight(tile);
+    m_dnd->layout().setWidth(tile + 2 * m_dndPad);
+    m_dnd->layout().setHeight(tile + 2 * m_dndPad);
     const SkIRect iconRect { item.icon.worldRect() };
     const SkPoint pointer { AKApp::Get()->pointer().pos() };
     m_dnd->setHotspot(SkIPoint::Make(
-        m_dndPad + std::clamp(Int32(pointer.x()) - iconRect.x(), 0, m_metrics.tile),
-        m_dndPad + std::clamp(Int32(pointer.y()) - iconRect.y(), 0, m_metrics.tile)));
+        m_dndPad + std::clamp(Int32(pointer.x()) - iconRect.x(), 0, tile),
+        m_dndPad + std::clamp(Int32(pointer.y()) - iconRect.y(), 0, tile)));
 
     std::vector<std::string> mimeTypes { DOCK_APP_MIME_TYPE };
 
@@ -828,10 +874,16 @@ void Dock::setPinGapProgress(SkScalar progress) noexcept
     // Grows from nothing to a tile plus its spacing (the negative margin cancels the row's gap, so
     // a closed slot takes no room at all).
     m_pinGapProgress = progress;
+    sizePinGap();
+    fitToScreen(); // It widens the dock too
+}
+
+void Dock::sizePinGap() noexcept
+{
     const DockMetrics &m { m_metrics };
-    m_pinGap.layout().setWidth(progress * SkScalar(m.tile + m.spacing));
+    m_pinGap.layout().setWidth(m_pinGapProgress * (m.tile + m.spacing));
     m_pinGap.layout().setHeight(m.tile);
-    m_pinGap.layout().setMargin(YGEdgeRight, -SkScalar(m.spacing));
+    m_pinGap.layout().setMargin(YGEdgeRight, -m.spacing);
 }
 
 void Dock::placePinGap() noexcept
@@ -1039,8 +1091,9 @@ void Dock::startFly(const SkPoint &local) noexcept
     // The icon as it was under the pointer (the drag icon's hotspot) flies to the item's slot. The
     // item stays hidden until it lands.
     // (The drag icon's hotspot is relative to its surface, which includes the shadow margin.)
-    const SkIPoint hotspot { m_dnd ? m_dnd->hotspot() - SkIPoint::Make(m_dndPad, m_dndPad) : SkIPoint::Make(m_metrics.tile / 2, m_metrics.tile / 2) };
-    const SkIRect from { SkIRect::MakeXYWH(Int32(local.x()) - hotspot.x(), Int32(local.y()) - hotspot.y(), m_metrics.tile, m_metrics.tile) };
+    const Int32 tile { Int32(std::lround(m_metrics.tile)) };
+    const SkIPoint hotspot { m_dnd ? m_dnd->hotspot() - SkIPoint::Make(m_dndPad, m_dndPad) : SkIPoint::Make(tile / 2, tile / 2) };
+    const SkIRect from { SkIRect::MakeXYWH(Int32(local.x()) - hotspot.x(), Int32(local.y()) - hotspot.y(), tile, tile) };
 
     m_fly = std::make_unique<DropFly>(*this, GetShelf()->assets.appIcon(m_dragAppId), m_dragAppId, from);
     m_fly->setItem(m_dragItem.get());

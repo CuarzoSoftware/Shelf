@@ -4,6 +4,8 @@
 #include <CZ/Core/Cuarzo.h>
 #include <CZ/Core/CZAdaptive.h>
 #include <CZ/skia/core/SkColor.h>
+#include <CZ/skia/core/SkScalar.h>
+#include <cmath>
 
 using namespace CZ;
 
@@ -37,24 +39,33 @@ constexpr Int32   DOCK_SHADOW_EXTENT    { (DOCK_SHADOW_BLUR * 3) / 2 };
 /**
  * @brief Dock geometry for a tile (icon) size. Everything scales with it, keeping the proportions
  *        of the macOS Dock at its default tile size (48).
+ *
+ * The tile size can be fractional: a dock that doesn't fit the screen shrinks continuously while
+ * its items grow in or shrink out (see Dock::fitToScreen()). Round where whole units are needed.
  */
 struct DockMetrics
 {
-    Int32 tile;
-    Int32 paddingTop;       // above the icons
-    Int32 paddingBottom;    // below the icons (holds the running indicators)
-    Int32 paddingSide;      // at both ends
-    Int32 spacing;          // between icons
-    Int32 height;
-    Int32 radius;
-    Int32 dividerSlot;      // width of the divider's (draggable) slot
-    Int32 dividerHeight;    // length of the divider line
-    Int32 minWidth;         // see Make()
+    SkScalar tile;
+    SkScalar paddingTop;    // above the icons
+    SkScalar paddingBottom; // below the icons (holds the running indicators)
+    SkScalar paddingSide;   // at both ends
+    SkScalar spacing;       // between icons
+    SkScalar height;
+    SkScalar radius;
+    SkScalar dividerSlot;   // width of the divider's (draggable) slot
+    SkScalar dividerHeight; // length of the divider line
+    SkScalar minWidth;      // see Make()
 
-    static constexpr DockMetrics Make(Int32 tile) noexcept
+    /// @p tile clamped to DOCK_TILE_SIZE_MIN..MAX.
+    static constexpr Int32 ClampTile(Int32 tile) noexcept
     {
-        tile = tile < DOCK_TILE_SIZE_MIN ? DOCK_TILE_SIZE_MIN : (tile > DOCK_TILE_SIZE_MAX ? DOCK_TILE_SIZE_MAX : tile);
-        const auto scaled { [tile](Int32 atDefault) { return (atDefault * tile + DOCK_TILE_SIZE_DEFAULT / 2) / DOCK_TILE_SIZE_DEFAULT; } };
+        return tile < DOCK_TILE_SIZE_MIN ? DOCK_TILE_SIZE_MIN : (tile > DOCK_TILE_SIZE_MAX ? DOCK_TILE_SIZE_MAX : tile);
+    }
+
+    static DockMetrics Make(SkScalar tile) noexcept
+    {
+        tile = tile < DOCK_TILE_SIZE_MIN ? SkScalar(DOCK_TILE_SIZE_MIN) : (tile > DOCK_TILE_SIZE_MAX ? SkScalar(DOCK_TILE_SIZE_MAX) : tile);
+        const auto scaled { [tile](SkScalar atDefault) { return atDefault * tile / SkScalar(DOCK_TILE_SIZE_DEFAULT); } };
 
         DockMetrics m {};
         m.tile          = tile;
@@ -68,7 +79,7 @@ struct DockMetrics
         m.dividerHeight = scaled(36);
         // Narrowest dock whose 9-patch frame doesn't overlap: both rounded corners and their
         // shadow falloff, plus the stretched middle column.
-        m.minWidth      = 2 * (m.radius + DOCK_SHADOW_EXTENT) + 1;
+        m.minWidth      = 2 * (std::round(m.radius) + DOCK_SHADOW_EXTENT) + 1;
         return m;
     }
 };
