@@ -6,6 +6,8 @@
   </a>
 </p>
 
+> This project is part of the [Cuarzo Framework](https://github.com/CuarzoSoftware/Cuarzo). Follow the instructions there to build and install it.
+
 Dock for Cuarzo OS, built on Marco (Wayland layer shell).
 
 Currently provides one auto-hiding dock per screen, styled after the macOS Monterey Dock.
