@@ -50,7 +50,18 @@ public:
 
     /// Shown while the compositor's Exposé is (even if it auto-hides), see Shelf::setExposeShown().
     void setExposeShown(bool shown) noexcept;
-    bool autoHide() const noexcept { return m_autoHide; }
+
+    /// The auto-hide setting (see setAutoHide()).
+    bool autoHide() const noexcept { return m_autoHideSetting; }
+
+    /**
+     * @brief Whether a fullscreen window's workspace is shown on its screen (see Crystals'
+     *        FullscreenChanged): it auto-hides there, even if auto-hide is disabled.
+     *
+     * The area it reserves stays (the fullscreen window covers it anyway): the windows of the
+     * desktop keep their size.
+     */
+    void setFullscreen(bool fullscreen) noexcept;
 
     /// Slides the dock in / out (no-op if already there or heading there).
     void show() noexcept;
@@ -68,6 +79,17 @@ public:
 
     /// Launches an app (through its desktop entry) and bounces its icon until it shows a window.
     void launchApp(const std::string &appId) noexcept;
+
+    /**
+     * @brief The app wants the user's attention (e.g. a window of it appeared in another workspace,
+     *        see Crystals' Attention): its icon bounces until stopAttention() or a timeout.
+     *
+     * A hidden dock stays hidden (the bouncing icon peeks over the screen edge).
+     */
+    void requestAttention(const std::string &appId) noexcept;
+
+    /// A window of the app was activated: its icon lands.
+    void stopAttention(const std::string &appId) noexcept;
 
     /// Called by the divider when a resize drag ends.
     void dividerDragEnded(bool resized) noexcept;
@@ -260,6 +282,9 @@ private:
     bool m_trashTarget { false }; // Files are being dragged over the trash
     bool m_pointerInside { false };
     bool m_exposeShown { false };
+    bool m_autoHideSetting { true }; // m_autoHide is the effective one (also while fullscreen)
+    bool m_fullscreen { false };
+    void applyAutoHide() noexcept;
 
     // 0 = hidden, 1 = shown
     Float64 m_progress { 0.0 };

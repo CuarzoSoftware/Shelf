@@ -1,6 +1,7 @@
 #ifndef SHELF_H
 #define SHELF_H
 
+#include <unordered_set>
 #include <functional>
 #include <Core/Types.h>
 #include <Core/Assets.h>
@@ -143,6 +144,13 @@ private:
     /// Crystals' Exposé shown/hidden on the output named @p output (org.cuarzo.Crystals ExposeChanged):
     /// the dock of that screen shows meanwhile.
     void setExposeShown(bool shown, const std::string &output) noexcept;
+
+    /// An app wants attention (Crystals' AppAttention signal): its icon bounces in every dock.
+    void requestAttention(const std::string &appId) noexcept;
+
+    /// Whether the screen @p output shows a fullscreen window's workspace (Crystals' FullscreenChanged).
+    void setFullscreen(bool fullscreen, const std::string &output) noexcept;
+    bool isFullscreen(const std::string &output) const noexcept { return m_fullscreenOutputs.contains(output); }
     void addWindow(MForeignToplevel *window) noexcept;
     void removeWindow(MForeignToplevel *window) noexcept;
     void updateModel() noexcept;
@@ -158,6 +166,9 @@ private:
     std::vector<std::shared_ptr<CZEventSource>> m_dropReaders; // Dropped uri-lists being read
     sd_bus_slot *m_deskMatch {};
     sd_bus_slot *m_exposeMatch {};
+    sd_bus_slot *m_attentionMatch {};
+    sd_bus_slot *m_fullscreenMatch {};
+    std::unordered_set<std::string> m_fullscreenOutputs;
     std::shared_ptr<CZBus> m_bus;
 };
 

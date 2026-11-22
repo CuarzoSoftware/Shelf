@@ -338,7 +338,7 @@ void Dock::rebuildItems() noexcept
         {
             bounce->second->setItem(item.get());
 
-            if (!app.windows.empty())
+            if (!app.windows.empty() && !bounce->second->attention)
                 bounce->second->stop();
         }
 
@@ -492,7 +492,8 @@ void Dock::updateExclusiveZone() noexcept
 {
     // Auto-hide reserves nothing. Otherwise reserve the dock and its gap: the zone counts from the
     // anchored edge including the (negative) bottom margin, so add back the part below the screen.
-    if (m_autoHide)
+    // The setting, not the fullscreen auto-hide (see setFullscreen()): the desktop's windows keep their size.
+    if (m_autoHideSetting)
         setExclusiveZone(0);
     else
         setExclusiveZone(Int32(std::ceil(m_metrics.height)) + DockFrame::BaseMargins().fBottom);
@@ -500,11 +501,31 @@ void Dock::updateExclusiveZone() noexcept
 
 void Dock::setAutoHide(bool enabled) noexcept
 {
+    if (m_autoHideSetting == enabled)
+        return;
+
+    m_autoHideSetting = enabled;
+    updateExclusiveZone();
+    applyAutoHide();
+}
+
+void Dock::setFullscreen(bool fullscreen) noexcept
+{
+    if (m_fullscreen == fullscreen)
+        return;
+
+    m_fullscreen = fullscreen;
+    applyAutoHide();
+}
+
+void Dock::applyAutoHide() noexcept
+{
+    const bool enabled { m_autoHideSetting || m_fullscreen };
+
     if (m_autoHide == enabled)
         return;
 
     m_autoHide = enabled;
-    updateExclusiveZone();
 
     if (!m_autoHide)
         show();
@@ -1275,6 +1296,33 @@ void Dock::launchApp(const std::string &appId) noexcept
     // Its label (shown since the pointer is over it) goes away while it bounces.
     if (const HoverLabel *label { m_labels[m_activeLabel].get() }; label->item == item)
         hideLabels();
+}
+
+void Dock::requestAttention(const std::string &appId) noexcept
+{
+    // Launching (it bounces anyway) or already bouncing
+    if (appId.empty() || m_bounces.contains(appId))
+        return;
+
+    DockItem *item { nullptr };
+
+    for (auto &i : m_appItems)
+        if (i->appId == appId) { item = i.get(); break; }
+
+    if (!item)
+        return;
+
+    auto bounce { std::make_unique<LaunchBounce>(*this, GetShelf()->assets.appIcon(appId)) };
+    bounce->attention = true;
+    bounce->setItem(item);
+    bounce->onFinished = [this, appId]{ m_bounces.erase(appId); };
+    m_bounces[appId] = std::move(bounce);
+}
+
+void Dock::stopAttention(const std::string &appId) noexcept
+{
+    if (auto it { m_bounces.find(appId) }; it != m_bounces.end() && it->second->attention)
+        it->second->stop();
 }
 
 /* --------------------------------------- Hover labels --------------------------------------- */

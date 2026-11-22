@@ -57,6 +57,12 @@ Shelf::~Shelf() noexcept
     if (m_exposeMatch)
         sd_bus_slot_unref(m_exposeMatch);
 
+    if (m_attentionMatch)
+        sd_bus_slot_unref(m_attentionMatch);
+
+    if (m_fullscreenMatch)
+        sd_bus_slot_unref(m_fullscreenMatch);
+
     m_dropReaders.clear();
     m_inotifySource.reset();
 
@@ -80,6 +86,7 @@ void Shelf::onScreenPlugged(MScreen &screen) noexcept
 
     dock->setTileSize(settings.tileSize);
     dock->setAutoHide(autoHide());
+    dock->setFullscreen(isFullscreen(screen.props().name));
 }
 
 void Shelf::onScreenUnplugged(MScreen &screen) noexcept
@@ -120,7 +127,13 @@ void Shelf::addWindow(MForeignToplevel *window) noexcept
 
     m_windows.push_back(window);
 
-    window->onPropsChanged.subscribe(this, [this](CZBitset<MForeignToplevel::Changes> changes){
+    window->onPropsChanged.subscribe(this, [this, window](CZBitset<MForeignToplevel::Changes> changes){
+        // The user went to it: the app's icon stops bouncing for attention
+        if (changes.has(MForeignToplevel::CHState) && window->props().state.has(MForeignToplevel::Activated))
+            for (MScreen *s : marco->screens())
+                if (auto *dock { static_cast<Dock*>(s->userData) })
+                    dock->stopAttention(window->props().appId);
+
         if (changes.has(MForeignToplevel::CHAppId | MForeignToplevel::CHState))
             updateModel();
     });
@@ -216,8 +229,55 @@ void Shelf::initDeskWatch() noexcept
             return 0;
         }, nullptr, this);
 
+    // A window of an app wants attention (see Crystals' Attention): its icon bounces
+    sd_bus_match_signal_async(bus->bus(), &m_attentionMatch, nullptr, "/org/cuarzo/Crystals",
+        "org.cuarzo.Crystals", "AppAttention",
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            const char *appId {};
+
+            if (sd_bus_message_read(m, "s", &appId) >= 0 && appId && _shelf == data)
+                static_cast<Shelf*>(data)->requestAttention(appId);
+
+            return 0;
+        }, nullptr, this);
+
+    // Screens showing a fullscreen window's workspace: their dock auto-hides
+    sd_bus_match_signal_async(bus->bus(), &m_fullscreenMatch, nullptr, "/org/cuarzo/Crystals",
+        "org.cuarzo.Crystals", "FullscreenChanged",
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            int fullscreen { 0 };
+            const char *output {};
+
+            if (sd_bus_message_read(m, "bs", &fullscreen, &output) >= 0 && output && _shelf == data)
+                static_cast<Shelf*>(data)->setFullscreen(fullscreen, output);
+
+            return 0;
+        }, nullptr, this);
+
+    // Crystals sends the current state when told we're here (e.g. Shelf restarted)
+    sd_bus_emit_signal(bus->bus(), "/org/cuarzo/Shelf", "org.cuarzo.Shelf", "Started", "");
+
     // Async requests are only queued: send them now (the bus source only waits for input).
     sd_bus_flush(bus->bus());
+}
+
+void Shelf::setFullscreen(bool fullscreen, const std::string &output) noexcept
+{
+    if (fullscreen)
+        m_fullscreenOutputs.insert(output);
+    else
+        m_fullscreenOutputs.erase(output);
+
+    for (MScreen *s : marco->screens())
+        if (auto *dock { static_cast<Dock*>(s->userData) }; dock && s->props().name == output)
+            dock->setFullscreen(fullscreen);
+}
+
+void Shelf::requestAttention(const std::string &appId) noexcept
+{
+    for (MScreen *s : marco->screens())
+        if (auto *dock { static_cast<Dock*>(s->userData) })
+            dock->requestAttention(appId);
 }
 
 void Shelf::setExposeShown(bool shown, const std::string &output) noexcept
@@ -531,7 +591,18 @@ bool Shelf::launch(const std::string &appId) noexcept
         return false;
     }
 
-    return entry->launch();
+    if (!entry->launch())
+        return false;
+
+    // The user launched it: Crystals shows its first window, wherever it opens (other windows
+    // appearing in other workspaces only make their icon bounce, see Crystals' Attention)
+    if (m_bus)
+    {
+        sd_bus_emit_signal(m_bus->bus(), "/org/cuarzo/Shelf", "org.cuarzo.Shelf", "AppLaunched", "s", appId.c_str());
+        sd_bus_flush(m_bus->bus());
+    }
+
+    return true;
 }
 
 bool Shelf::Spawn(const std::vector<std::string> &args) noexcept

@@ -33,6 +33,9 @@ public:
     /// Lands on the current bounce and finishes.
     void stop() noexcept;
 
+    /// Bouncing because the app wants attention (see Dock::requestAttention()), not launching.
+    bool attention { false };
+
     std::function<void()> onFinished;
 
 private:
