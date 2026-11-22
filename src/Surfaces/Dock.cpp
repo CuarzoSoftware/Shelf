@@ -12,6 +12,7 @@
 #include <CZ/Core/Events/CZEvent.h>
 #include <CZ/Core/Events/CZLayoutEvent.h>
 #include <CZ/Core/Events/CZPointerButtonEvent.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <unistd.h>
@@ -824,13 +825,24 @@ void Dock::dragOver(MDNDOffer &offer, const SkPoint &pos) noexcept
 
     setTrashTarget(false);
 
-    // Files from other apps: .desktop files are pinned where dropped (others are ignored, the list
-    // is only read on drop). Copied: the source must never delete them.
-    if (canPin(offer))
+    // Files from other apps: a single application .desktop file (not in the dock yet) is pinned
+    // where dropped, an empty slot opening there. Copied: the source must never delete it. Nothing
+    // else is accepted outside the trash, nor anywhere past the divider.
+    if (isFileDrag(offer))
     {
-        offer.accept("text/uri-list");
-        offer.setActions(MDNDOffer::Copy, MDNDOffer::Copy);
-        openPinGap(size_t(std::clamp(appSlotAt(pos), 0, Int32(pinnedCount()))));
+        m_fileDragPos = pos;
+        peekFiles(offer);
+
+        if (!overOthers(pos) && !pinnableAppId().empty())
+        {
+            offer.accept("text/uri-list");
+            offer.setActions(MDNDOffer::Copy, MDNDOffer::Copy);
+            openPinGap(size_t(std::clamp(appSlotAt(pos), 0, Int32(pinnedCount()))));
+            return;
+        }
+
+        closePinGap(true);
+        offer.accept("");
         return;
     }
 
@@ -959,9 +971,59 @@ void Dock::closePinGap(bool animated) noexcept
     m_pinGapAnim.reset();
 }
 
-bool Dock::canPin(MDNDOffer &offer) const noexcept
+bool Dock::isFileDrag(MDNDOffer &offer) const noexcept
 {
     return !reordering() && offer.hasMimeType("text/uri-list") && !offer.hasMimeType(DOCK_APP_MIME_TYPE);
+}
+
+bool Dock::overOthers(const SkPoint &pos) const noexcept
+{
+    return pos.x() >= SkScalar(divider.worldRect().x());
+}
+
+void Dock::peekFiles(MDNDOffer &offer) noexcept
+{
+    if (m_peekOffer.get() == &offer)
+        return;
+
+    m_peekOffer.reset(&offer);
+    m_peekDone = false;
+    m_peekFiles.clear();
+    m_peekAppId.clear();
+
+    const UInt64 serial { ++m_peekSerial };
+    CZWeak<Dock> self { this };
+
+    GetShelf()->readDroppedFiles(offer.receive("text/uri-list"), [this, self, serial](std::vector<std::filesystem::path> files){
+        if (!self.get() || serial != m_peekSerial)
+            return;
+
+        m_peekDone = true;
+        m_peekFiles = std::move(files);
+
+        // Only applications (not links or folders), see Shelf::pinDesktopFiles().
+        if (m_peekFiles.size() == 1 && m_peekFiles[0].extension() == ".desktop" && XDGDesktopEntry::Load(m_peekFiles[0]))
+            m_peekAppId = m_peekFiles[0].stem().string();
+
+        // Still over the dock: open the slot now if it can be pinned.
+        if (m_dndInside && m_peekOffer.get())
+            dragOver(*m_peekOffer.get(), m_fileDragPos);
+    });
+}
+
+std::string Dock::pinnableAppId() const noexcept
+{
+    if (!m_peekDone || m_peekAppId.empty() || inDock(m_peekAppId))
+        return {};
+
+    return m_peekAppId;
+}
+
+bool Dock::inDock(const std::string &appId) const noexcept
+{
+    return std::any_of(m_appItems.begin(), m_appItems.end(), [&appId](const auto &item){
+        return !item->removing && item->appId == appId;
+    });
 }
 
 void Dock::dropped(MDNDOffer &offer, const SkPoint &pos) noexcept
@@ -976,20 +1038,28 @@ void Dock::dropped(MDNDOffer &offer, const SkPoint &pos) noexcept
         return;
     }
 
-    if (canPin(offer))
+    if (isFileDrag(offer))
     {
-        // Where the slot was opened. It stays open until the app takes it (or closes if nothing
-        // could be pinned).
+        // Pinned only if accepted (see dragOver()): its list was read already.
+        peekFiles(offer);
+
+        if (overOthers(pos) || pinnableAppId().empty())
+        {
+            dndLeft(); // No leave event follows a drop
+            return;
+        }
+
+        // Where the slot was opened. It stays open until the app takes it (or closes if it
+        // couldn't be pinned).
         const size_t index { m_pinGapOpen ? m_pinGapIndex : size_t(std::clamp(appSlotAt(pos), 0, Int32(pinnedCount()))) };
-        const Int32 fd { offer.receive("text/uri-list") };
+        const auto files { m_peekFiles };
         offer.finish();
         m_pinGapHeld = m_pinGapOpen;
         dndLeft(); // No leave event follows a drop
 
-        GetShelf()->pinDroppedFiles(fd, index, [this](bool pinned){
-            m_pinGapHeld = false;
-            closePinGap(!pinned); // Pinned: the new item is already in its place
-        });
+        const bool pinned { GetShelf()->pinDesktopFiles(files, index) };
+        m_pinGapHeld = false;
+        closePinGap(!pinned); // Pinned: the new item is already in its place
         return;
     }
 

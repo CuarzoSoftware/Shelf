@@ -337,20 +337,6 @@ void Shelf::trashDroppedFiles(Int32 fd) noexcept
     readDroppedFiles(fd, [this](std::vector<std::filesystem::path> files){ trashFiles(files); });
 }
 
-void Shelf::pinDroppedFiles(Int32 fd, size_t index, std::function<void(bool pinned)> done) noexcept
-{
-    if (fd < 0)
-    {
-        if (done) done(false);
-        return;
-    }
-
-    readDroppedFiles(fd, [this, index, done](std::vector<std::filesystem::path> files){
-        const bool pinned { pinDesktopFiles(files, index) };
-        if (done) done(pinned);
-    });
-}
-
 void Shelf::readDroppedFiles(Int32 fd, std::function<void(std::vector<std::filesystem::path>)> done) noexcept
 {
     if (fd < 0)

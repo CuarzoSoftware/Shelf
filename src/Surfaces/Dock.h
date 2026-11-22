@@ -22,6 +22,7 @@
 #include <CZ/Core/CZTimer.h>
 #include <CZ/Core/CZWeak.h>
 #include <CZ/AK/Nodes/AKText.h>
+#include <filesystem>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -147,8 +148,30 @@ private:
     SkPoint screenOrigin() const noexcept;
     bool overTrash(MDNDOffer &offer, const SkPoint &pos) const noexcept;
 
-    /// Files (e.g. .desktop files from a file manager or the desktop) that may be pinned.
-    bool canPin(MDNDOffer &offer) const noexcept;
+    /// Files dragged from any client (not one of our apps being reordered).
+    bool isFileDrag(MDNDOffer &offer) const noexcept;
+
+    /// Whether @p pos is past the divider, over the minimized windows and the trash (nothing is
+    /// pinned there, the trash takes files on its own tile only).
+    bool overOthers(const SkPoint &pos) const noexcept;
+
+    /**
+     * @brief Starts reading the file list of a file drag, once per offer (a data offer can be
+     *        received before the drop). The drag is evaluated again once it arrives.
+     */
+    void peekFiles(MDNDOffer &offer) noexcept;
+
+    /**
+     * @brief The app the dragged files would pin, or empty.
+     *
+     * Only a single application .desktop file is pinned, and only if its app isn't in the dock
+     * already. Several files (even with .desktop files among them) can only go to the trash. Empty
+     * while the list is still being read.
+     */
+    std::string pinnableAppId() const noexcept;
+
+    /// Whether @p appId has a tile in the dock (pinned or running).
+    bool inDock(const std::string &appId) const noexcept;
 
     /// The app slot under @p pos (0 = the first app after Desk's tile), unclamped.
     Int32 appSlotAt(const SkPoint &pos) const noexcept;
@@ -169,6 +192,15 @@ private:
     size_t m_pinGapIndex { 0 };
     bool m_pinGapOpen { false };   // In the dock (opening, open or closing)
     bool m_pinGapHeld { false };   // Dropped: kept until the app is pinned (see dropped())
+
+    // The file list of the drag over the dock (see peekFiles()).
+    CZWeak<MDNDOffer> m_peekOffer;
+    UInt64 m_peekSerial { 0 };            // Results of earlier offers are ignored
+    bool m_peekDone { false };
+    std::vector<std::filesystem::path> m_peekFiles;
+    std::string m_peekAppId;              // Of the dragged file if it's a single application .desktop file
+    SkPoint m_fileDragPos {};             // Latest position of the file drag (surface coordinates)
+
     void setTrashTarget(bool target) noexcept;
     void dndLeft() noexcept;
     SkIRect thumbnailRect(Int32 index, Int32 count) const noexcept;

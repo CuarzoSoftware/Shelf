@@ -151,7 +151,8 @@ constexpr UInt32   DOCK_BOUNCE_TIMEOUT_MS { 10000 };
 
 // Icons are loaded once at this size (px) so they stay sharp up to DOCK_TILE_SIZE_MAX at 2x.
 constexpr Int32 DOCK_ICON_LOAD_SIZE     { 256 };
-constexpr SkScalar DOCK_ITEM_DARKEN     { 0.9f };  // Color factor of a pressed item / drop target
+constexpr SkScalar DOCK_ITEM_DARKEN     { 0.9f };  // Color factor of a pressed item
+constexpr SkScalar DOCK_DROP_DARKEN     { 0.6f };  // Color factor of the trash while files would be dropped on it
 constexpr SkColor  DOCK_ICON_SHADOW_COLOR    { 0x38000000 }; // Faint shadow following each icon's shape
 constexpr SkScalar DOCK_ICON_SHADOW_RADIUS   { 6.f };
 constexpr Int32    DOCK_ICON_SHADOW_OFFSET_Y { 1 };

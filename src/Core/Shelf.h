@@ -107,25 +107,29 @@ public:
     void trashDroppedFiles(Int32 fd) noexcept;
 
     /**
-     * @brief Pins the apps of the .desktop files of a dropped `text/uri-list` (other files are
-     *        ignored), from position @p index of the pinned apps on.
+     * @brief Reads a dropped (or dragged) `text/uri-list` as it arrives, then calls @p done with its
+     *        local files.
+     *
+     * @param fd The read end of the data pipe (owned: closed when done). Read without blocking the
+     *           event loop. Nothing is called if it's -1.
+     */
+    void readDroppedFiles(Int32 fd, std::function<void(std::vector<std::filesystem::path>)> done) noexcept;
+
+    /**
+     * @brief Pins the apps of the .desktop files in @p files (other files are ignored), from
+     *        position @p index of the pinned apps on.
      *
      * Files outside the applications folders are installed to ~/.local/share/applications first
      * (so they're found by id, like any app). Already pinned apps are moved there.
      *
-     * @param fd The read end of the drop's data pipe (owned: closed when done). Read without
-     *           blocking the event loop.
-     * @param done Invoked once done, telling whether any app got pinned (the dock already shows it).
+     * @return Whether any app got pinned (the dock already shows it).
      */
-    void pinDroppedFiles(Int32 fd, size_t index, std::function<void(bool pinned)> done = nullptr) noexcept;
+    bool pinDesktopFiles(const std::vector<std::filesystem::path> &files, size_t index) noexcept;
 
     /// Emitted after apps(), minimized() or deskRunning() change.
     CZSignal<> onWindowsChanged;
 
 private:
-    /// Reads a dropped uri-list as it arrives, then calls @p done with its local files.
-    void readDroppedFiles(Int32 fd, std::function<void(std::vector<std::filesystem::path>)> done) noexcept;
-    bool pinDesktopFiles(const std::vector<std::filesystem::path> &files, size_t index) noexcept;
     void onScreenPlugged(MScreen &screen) noexcept;
     void onScreenUnplugged(MScreen &screen) noexcept;
 

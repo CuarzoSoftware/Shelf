@@ -140,7 +140,7 @@ void DockItem::setPressed(bool pressed) noexcept
 void DockItem::updateDarkening() noexcept
 {
     // Multiplies the colors (rather than fading): darker over any background.
-    const SkScalar f { (m_dropTarget || m_darkPressed) ? DOCK_ITEM_DARKEN : 1.f };
+    const SkScalar f { m_dropTarget ? DOCK_DROP_DARKEN : m_darkPressed ? DOCK_ITEM_DARKEN : 1.f };
     icon.setColorFactor({ f, f, f, 1.f });
     badge.setColorFactor({ f, f, f, 1.f });
 }
