@@ -156,17 +156,8 @@ Int32 Dock::screenWidth() const noexcept
     if (!s)
         return 0;
 
-    // Logical width of the current mode.
-    for (const auto &mode : s->props().modes)
-    {
-        if (!mode.isCurrent)
-            continue;
-
-        const Int32 px { CZ::Is90Transform(s->props().transform) ? mode.size.height() : mode.size.width() };
-        return px / std::max(1, s->props().scale);
-    }
-
-    return 0;
+    // Its logical width (xdg-output: right with fractional scaling too)
+    return std::max(0, s->logicalSize().width());
 }
 
 Int32 Dock::availableWidth() const noexcept
