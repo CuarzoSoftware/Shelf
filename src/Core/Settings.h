@@ -29,6 +29,9 @@ public:
     /// App ids pinned to the dock, in dock order.
     std::vector<std::string> pinnedApps;
 
+    /// Whether load() found no settings file (the first launch): see Shelf::pinDefaultApps().
+    bool firstLaunch { false };
+
     /// Whether the dock hides when the pointer isn't over it.
     bool autoHide { true };
 

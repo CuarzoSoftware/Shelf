@@ -50,6 +50,14 @@ public:
 
     bool isPinned(const std::string &appId) const noexcept;
 
+    /**
+     * @brief Pins the usual apps found installed (first launch only, see Settings::firstLaunch).
+     *
+     * For each one (a browser, music, a camera, files, settings, an editor...) the first installed
+     * candidate is pinned: known desktop ids of the app itself, its Flatpak and its alternatives.
+     */
+    void pinDefaultApps() noexcept;
+
     /// The app's display name (its desktop entry Name), or the app id if it has none.
     std::string appName(const std::string &appId) const noexcept;
 

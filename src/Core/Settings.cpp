@@ -28,6 +28,7 @@ void Settings::load() noexcept
     pinnedApps.clear();
     autoHide = true;
     tileSize = DOCK_TILE_SIZE_DEFAULT;
+    firstLaunch = false;
 
     const fs::path path { FilePath() };
     std::error_code ec;
@@ -35,6 +36,7 @@ void Settings::load() noexcept
     if (!fs::is_regular_file(path, ec))
     {
         Log(CZInfo, CZLN, "No settings file at {}, using defaults", path.string());
+        firstLaunch = true;
         return;
     }
 

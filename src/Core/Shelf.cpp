@@ -37,6 +37,9 @@ Shelf::Shelf() noexcept
 
     xdgkit = XDGKit::Make();
     settings.load();
+
+    if (settings.firstLaunch)
+        pinDefaultApps();
     assets.init();
     initWindows();
     initDeskWatch();
@@ -549,6 +552,50 @@ void Shelf::setTileSize(Int32 tile) noexcept
     for (MScreen *s : marco->screens())
         if (auto *dock { static_cast<Dock*>(s->userData) })
             dock->setTileSize(tile);
+}
+
+void Shelf::pinDefaultApps() noexcept
+{
+    if (!xdgkit)
+        return;
+
+    // In dock order. Each: candidate desktop ids, the first one installed wins
+    static const std::vector<std::vector<const char*>> defaults
+    {
+        { "org.mozilla.firefox", "firefox", "firefox-esr" },
+        { "com.spotify.Client", "spotify", "spotify-client" },
+        { "google-chrome", "com.google.Chrome", "google-chrome-stable" },
+        { "org.gnome.Snapshot", "org.gnome.Cheese", "cheese", "org.kde.kamoso" },                                     // Camera
+        { "org.gnome.Nautilus", "org.kde.dolphin", "nemo", "org.xfce.thunar", "thunar", "pcmanfm-qt", "pcmanfm" },     // Files
+        { "org.cuarzo.Settings" },
+        { "org.inkscape.Inkscape", "inkscape" },
+        { "org.gnome.Calculator", "gnome-calculator", "org.kde.kcalc", "qalculate-gtk", "galculator" },               // Calculator
+        { "org.gnome.Calendar", "gnome-calendar", "org.kde.merkuro.calendar", "org.kde.korganizer" },                 // Calendar
+        { "org.gnome.TextEditor", "org.gnome.gedit", "gedit", "org.kde.kate", "org.kde.kwrite", "org.xfce.mousepad" }, // Text editor
+        { "com.microsoft.VSCode", "code", "com.visualstudio.code", "visual-studio-code", "code-oss" },
+        { "antigravity" },
+        { "org.qt-project.qtcreator", "io.qt.QtCreator", "qtcreator" },
+        { "foot", "org.gnome.Ptyxis", "org.gnome.Console", "org.gnome.Terminal", "org.kde.konsole", "kitty",           // Terminal
+          "com.mitchellh.ghostty", "Alacritty", "org.wezfurlong.wezterm", "xfce4-terminal", "qterminal", "xterm" },
+        { "com.obsproject.Studio", "obs" },
+    };
+
+    settings.pinnedApps.clear();
+
+    for (const auto &candidates : defaults)
+    {
+        for (const char *id : candidates)
+        {
+            if (xdgkit->desktopEntry(id))
+            {
+                settings.pinnedApps.emplace_back(id);
+                break;
+            }
+        }
+    }
+
+    Log(CZInfo, CZLN, "First launch: {} default apps pinned", settings.pinnedApps.size());
+    settings.save();
 }
 
 bool Shelf::isPinned(const std::string &appId) const noexcept
