@@ -279,12 +279,13 @@ void Dock::rebuildItems() noexcept
     syncDeskItem();
     m_appItems.clear();
 
-    // Apps: activate the app's most recent window (restoring it if minimized), or launch it if it's
-    // pinned but not running.
+    // Apps: activate the app's most recent window (restoring it if minimized), or launch it if it has
+    // none: pinned but not running, or running without windows (e.g. closed to the background,
+    // launching it again shows its window: they're single instance).
     for (const auto &app : shelf->apps())
     {
         auto item { std::make_unique<DockItem>(assets.appIcon(app.appId), &apps) };
-        item->setRunning(!app.windows.empty());
+        item->setRunning(app.running());
         item->appId = app.appId;
         item->onClicked = [this, appId = app.appId]{
             for (const auto &a : GetShelf()->apps())
@@ -372,7 +373,7 @@ void Dock::rebuildItems() noexcept
 
         auto item { std::make_unique<DockItem>(assets.windowIcon(), &others) };
         item->window.reset(window);
-        item->setBadge(assets.appIcon(window->props().appId));
+        item->setBadge(assets.appIcon(GetShelf()->appIdOf(*window)));
 
         // A small version of the window (the compositor's, title bar included) under the app icon.
         // Kept as the generic window icon if the compositor can't capture it.
@@ -387,7 +388,7 @@ void Dock::rebuildItems() noexcept
         };
         item->label = [w = CZWeak<MForeignToplevel>(window)]{
             if (!w) return std::string {};
-            return w->props().title.empty() ? GetShelf()->appName(w->props().appId) : w->props().title;
+            return w->props().title.empty() ? GetShelf()->appName(GetShelf()->appIdOf(*w)) : w->props().title;
         };
         setupItem(*item);
         DockItem *raw { item.get() };

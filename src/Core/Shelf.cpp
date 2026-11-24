@@ -36,6 +36,10 @@ Shelf::Shelf() noexcept
         return;
 
     xdgkit = XDGKit::Make();
+
+    // Apps launched from the dock get their own systemd scope: they count as running until their
+    // last process exits, even with no windows (see initScopeWatch())
+    XDGDesktopEntry::SetScopeLauncher("cuarzo");
     settings.load();
 
     if (settings.firstLaunch)
@@ -43,6 +47,7 @@ Shelf::Shelf() noexcept
     assets.init();
     initWindows();
     initDeskWatch();
+    initScopeWatch();
     initTrashWatch();
 
     marco->onScreenPlugged.subscribe(this, [this](MScreen &s){ onScreenPlugged(s); });
@@ -65,6 +70,9 @@ Shelf::~Shelf() noexcept
 
     if (m_fullscreenMatch)
         sd_bus_slot_unref(m_fullscreenMatch);
+
+    if (m_systemdMatch)
+        sd_bus_slot_unref(m_systemdMatch);
 
     m_dropReaders.clear();
     m_inotifySource.reset();
@@ -135,7 +143,7 @@ void Shelf::addWindow(MForeignToplevel *window) noexcept
         if (changes.has(MForeignToplevel::CHState) && window->props().state.has(MForeignToplevel::Activated))
             for (MScreen *s : marco->screens())
                 if (auto *dock { static_cast<Dock*>(s->userData) })
-                    dock->stopAttention(window->props().appId);
+                    dock->stopAttention(appIdOf(*window));
 
         if (changes.has(MForeignToplevel::CHAppId | MForeignToplevel::CHState))
             updateModel();
@@ -162,24 +170,166 @@ void Shelf::updateModel() noexcept
             std::find(m_minimized.begin(), m_minimized.end(), w) == m_minimized.end())
             m_minimized.push_back(w);
 
-    // Pinned apps first (even if not running), then the running ones in the order their first
-    // window appeared.
+    // Unpinned apps shown: those with windows, and those running without them (an active unit) that
+    // are actual apps (a desktop entry shown in menus, not e.g. an autostarted helper)
+    std::vector<std::string> running;
+
+    for (MForeignToplevel *w : m_windows)
+        running.push_back(appIdOf(*w));
+
+    for (const auto &id : m_scopedApps)
+    {
+        if (!xdgkit)
+            break;
+
+        if (auto entry { xdgkit->desktopEntry(id) }; entry && !entry->noDisplay)
+            running.push_back(id);
+    }
+
+    // They keep the order they started running in (the first window or the unit, whichever came first)
+    const auto contains { [](const auto &list, const std::string &id){ return std::find(list.begin(), list.end(), id) != list.end(); } };
+
+    std::erase_if(m_runningOrder, [&](const std::string &id){ return isPinned(id) || !contains(running, id); });
+
+    for (const auto &id : running)
+        if (!isPinned(id) && !contains(m_runningOrder, id))
+            m_runningOrder.push_back(id);
+
+    // Pinned apps first (even if not running), then the running ones
     m_apps.clear();
 
     for (const auto &id : settings.pinnedApps)
         m_apps.push_back({ id, true, {} });
 
+    for (const auto &id : m_runningOrder)
+        m_apps.push_back({ id, false, {} });
+
+    for (App &app : m_apps)
+        app.scoped = std::binary_search(m_scopedApps.begin(), m_scopedApps.end(), app.appId);
+
     for (MForeignToplevel *w : m_windows)
     {
-        auto app { std::find_if(m_apps.begin(), m_apps.end(), [w](const App &a){ return a.appId == w->props().appId; }) };
+        const std::string id { appIdOf(*w) };
+        auto app { std::find_if(m_apps.begin(), m_apps.end(), [&id](const App &a){ return a.appId == id; }) };
 
-        if (app == m_apps.end())
-            m_apps.push_back({ w->props().appId, false, { w } });
-        else
+        if (app != m_apps.end())
             app->windows.push_back(w);
     }
 
     onWindowsChanged.notify();
+}
+
+/* ------------------------------------- systemd scopes ------------------------------------- */
+
+static constexpr const char *SystemdBusName { "org.freedesktop.systemd1" };
+static constexpr const char *SystemdPath { "/org/freedesktop/systemd1" };
+static constexpr const char *SystemdManager { "org.freedesktop.systemd1.Manager" };
+
+void Shelf::initScopeWatch() noexcept
+{
+    if (!m_bus)
+        return;
+
+    // Units appearing, going away or finishing a job (e.g. started): the list is read again
+    sd_bus_match_signal_async(m_bus->bus(), &m_systemdMatch, SystemdBusName, SystemdPath, SystemdManager, nullptr,
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            if (_shelf != data)
+                return 0;
+
+            const char *member { sd_bus_message_get_member(m) };
+            const char *unit {};
+
+            if (!member)
+                return 0;
+
+            if (strcmp(member, "UnitNew") == 0 || strcmp(member, "UnitRemoved") == 0)
+                sd_bus_message_read(m, "s", &unit);
+            else if (strcmp(member, "JobRemoved") == 0)
+            {
+                UInt32 job {};
+                const char *path {}, *result {};
+                sd_bus_message_read(m, "uoss", &job, &path, &unit, &result);
+            }
+            else if (strcmp(member, "Reloading") == 0)
+                unit = "app-";
+
+            if (unit && strncmp(unit, "app-", 4) == 0)
+                static_cast<Shelf*>(data)->scheduleScopesRefresh();
+
+            return 0;
+        }, nullptr, this);
+
+    // systemd only emits them to subscribed clients
+    sd_bus_call_method_async(m_bus->bus(), nullptr, SystemdBusName, SystemdPath, SystemdManager, "Subscribe",
+        nullptr, nullptr, "");
+
+    refreshScopes();
+    sd_bus_flush(m_bus->bus());
+}
+
+void Shelf::scheduleScopesRefresh() noexcept
+{
+    // Several signals per launch / exit: read the list once they settle
+    if (m_scopesRefreshQueued)
+        return;
+
+    m_scopesRefreshQueued = true;
+    CZTimer::OneShot(100, [this](CZTimer*){
+        if (_shelf != this)
+            return;
+
+        m_scopesRefreshQueued = false;
+        refreshScopes();
+    });
+}
+
+void Shelf::refreshScopes() noexcept
+{
+    if (!m_bus)
+        return;
+
+    sd_bus_call_method_async(m_bus->bus(), nullptr, SystemdBusName, SystemdPath, SystemdManager, "ListUnitsByPatterns",
+        [](sd_bus_message *m, void *data, sd_bus_error *) -> int {
+            if (_shelf != data)
+                return 0;
+
+            if (sd_bus_message_is_method_error(m, nullptr))
+            {
+                const sd_bus_error *error { sd_bus_message_get_error(m) };
+                Log(CZWarning, CZLN, "Can't list the apps' systemd units: {}", error && error->message ? error->message : "unknown error");
+                return 0;
+            }
+
+            if (sd_bus_message_enter_container(m, SD_BUS_TYPE_ARRAY, "(ssssssouso)") < 0)
+                return 0;
+
+            std::vector<std::string> ids;
+            const char *name {}, *description {}, *load {}, *active {}, *sub {}, *following {}, *path {}, *jobType {}, *jobPath {};
+            UInt32 jobId {};
+
+            while (sd_bus_message_read(m, "(ssssssouso)", &name, &description, &load, &active, &sub, &following,
+                                       &path, &jobId, &jobType, &jobPath) > 0)
+                if (auto id { XDGDesktopEntry::ScopeAppId(name ? name : "") }; !id.empty())
+                    ids.emplace_back(std::move(id));
+
+            sd_bus_message_exit_container(m);
+            static_cast<Shelf*>(data)->setScopedApps(std::move(ids));
+            return 0;
+        }, this, "asas", 1, "active", 2, "app-*.scope", "app-*.service");
+
+    sd_bus_flush(m_bus->bus());
+}
+
+void Shelf::setScopedApps(std::vector<std::string> &&appIds) noexcept
+{
+    std::sort(appIds.begin(), appIds.end());
+    appIds.erase(std::unique(appIds.begin(), appIds.end()), appIds.end());
+
+    if (appIds == m_scopedApps)
+        return;
+
+    m_scopedApps = std::move(appIds);
+    updateModel();
 }
 
 /* ------------------------------------------ Desk ------------------------------------------ */
@@ -276,8 +426,11 @@ void Shelf::setFullscreen(bool fullscreen, const std::string &output) noexcept
             dock->setFullscreen(fullscreen);
 }
 
-void Shelf::requestAttention(const std::string &appId) noexcept
+void Shelf::requestAttention(const std::string &windowAppId) noexcept
 {
+    // Crystals sends the window's app id
+    const std::string appId { appIdForWindow(windowAppId) };
+
     for (MScreen *s : marco->screens())
         if (auto *dock { static_cast<Dock*>(s->userData) })
             dock->requestAttention(appId);
@@ -511,6 +664,34 @@ bool Shelf::pinDesktopFiles(const std::vector<std::filesystem::path> &files, siz
 
 /* --------------------------------- Pinned apps / launching --------------------------------- */
 
+std::string Shelf::appIdForWindow(const std::string &windowAppId) noexcept
+{
+    if (!xdgkit)
+        return windowAppId;
+
+    const auto &entries { xdgkit->desktopEntriesForWindow(windowAppId) };
+
+    if (entries.empty())
+        return windowAppId;
+
+    // Several apps may claim it (e.g. a Flatpak's entry and the user's own one): the one in the
+    // dock, else the one running, else the most likely
+    for (const auto &entry : entries)
+        if (isPinned(entry->id))
+            return entry->id;
+
+    for (const auto &entry : entries)
+        if (std::binary_search(m_scopedApps.begin(), m_scopedApps.end(), entry->id))
+            return entry->id;
+
+    return entries.front()->id;
+}
+
+std::string Shelf::appIdOf(const MForeignToplevel &window) noexcept
+{
+    return appIdForWindow(window.props().appId);
+}
+
 std::string Shelf::appName(const std::string &appId) const noexcept
 {
     auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
@@ -646,6 +827,11 @@ bool Shelf::launch(const std::string &appId) noexcept
     if (m_bus)
     {
         sd_bus_emit_signal(m_bus->bus(), "/org/cuarzo/Shelf", "org.cuarzo.Shelf", "AppLaunched", "s", appId.c_str());
+
+        // Its windows' app id, if it's another one (Crystals matches it against theirs)
+        if (!entry->startupWMClass.empty() && entry->startupWMClass != appId)
+            sd_bus_emit_signal(m_bus->bus(), "/org/cuarzo/Shelf", "org.cuarzo.Shelf", "AppLaunched", "s", entry->startupWMClass.c_str());
+
         sd_bus_flush(m_bus->bus());
     }
 

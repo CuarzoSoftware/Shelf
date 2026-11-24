@@ -25,6 +25,12 @@ namespace CZ { class CZEventSource; }
  * The window model comes from the wlr foreign toplevel management protocol (Marco's optional
  * MForeignToplevelManagerExt extension). If the compositor doesn't support it, the docks only show
  * the trash.
+ *
+ * Apps also count as running while their systemd user unit is active (`app-<launcher>-<id>-<random>.scope`
+ * and the like, see XDGDesktopEntry::ScopeAppId()), even with no windows: e.g. a music player or a
+ * chat app whose window was closed but keeps running in the background, like on macOS. Apps
+ * launched from the dock get one (see XDGDesktopEntry::SetScopeLauncher()), Flatpak apps and apps
+ * launched by other desktops' launchers too. Tracked through the systemd user manager on the bus.
  */
 class Shelf final : public CZObject
 {
@@ -37,7 +43,11 @@ public:
     {
         std::string appId;
         bool pinned { false };
-        std::vector<MForeignToplevel*> windows; ///< In the order they appeared (empty = not running)
+        std::vector<MForeignToplevel*> windows; ///< In the order they appeared
+        bool scoped { false }; ///< Its systemd unit is active (running, maybe with no windows)
+
+        /// Whether it's running (has windows, or its processes still run without them).
+        bool running() const noexcept { return scoped || !windows.empty(); }
     };
 
     std::shared_ptr<MApp> marco;
@@ -45,7 +55,7 @@ public:
     Assets assets;
     Settings settings;
 
-    /// Pinned apps (in pinned order), then the running unpinned ones (in the order they appeared).
+    /// Pinned apps (in pinned order), then the running unpinned ones (in the order they started running).
     const std::vector<App> &apps() const noexcept { return m_apps; }
 
     bool isPinned(const std::string &appId) const noexcept;
@@ -57,6 +67,20 @@ public:
      * candidate is pinned: known desktop ids of the app itself, its Flatpak and its alternatives.
      */
     void pinDefaultApps() noexcept;
+
+    /**
+     * @brief The app id (desktop entry id) of the app a window with app id @p windowAppId belongs to.
+     *
+     * They usually match, but not always: e.g. Discord's windows are "discord" while its Flatpak
+     * entry is com.discordapp.Discord (see XDGKit::desktopEntriesForWindow(): StartupWMClass). If
+     * several entries claim it, a pinned one, else one running (an active systemd unit), else the
+     * most likely. Without an entry, @p windowAppId itself. Windows are grouped by this id, so they
+     * go with the pinned app (and its launch bounce, and its systemd unit).
+     */
+    std::string appIdForWindow(const std::string &windowAppId) noexcept;
+
+    /// appIdForWindow() of @p window's app id.
+    std::string appIdOf(const MForeignToplevel &window) noexcept;
 
     /// The app's display name (its desktop entry Name), or the app id if it has none.
     std::string appName(const std::string &appId) const noexcept;
@@ -144,6 +168,10 @@ private:
 
     void initWindows() noexcept;
     void initDeskWatch() noexcept;
+    void initScopeWatch() noexcept;
+    void scheduleScopesRefresh() noexcept;
+    void refreshScopes() noexcept;
+    void setScopedApps(std::vector<std::string> &&appIds) noexcept;
     void initTrashWatch() noexcept;
     void updateTrashState() noexcept;
     void trashFiles(const std::vector<std::filesystem::path> &paths) noexcept;
@@ -154,7 +182,7 @@ private:
     void setExposeShown(bool shown, const std::string &output) noexcept;
 
     /// An app wants attention (Crystals' AppAttention signal): its icon bounces in every dock.
-    void requestAttention(const std::string &appId) noexcept;
+    void requestAttention(const std::string &windowAppId) noexcept;
 
     /// Whether the screen @p output shows a fullscreen window's workspace (Crystals' FullscreenChanged).
     void setFullscreen(bool fullscreen, const std::string &output) noexcept;
@@ -165,6 +193,9 @@ private:
 
     std::vector<MForeignToplevel*> m_windows; // In the order they appeared
     std::vector<App> m_apps;
+    std::vector<std::string> m_scopedApps;   // App ids with an active systemd unit (sorted)
+    std::vector<std::string> m_runningOrder; // Running unpinned apps, in the order they started running
+    bool m_scopesRefreshQueued { false };
     std::vector<MForeignToplevel*> m_minimized;
     bool m_deskRunning { false };
     bool m_trashFull { false };
@@ -176,6 +207,7 @@ private:
     sd_bus_slot *m_exposeMatch {};
     sd_bus_slot *m_attentionMatch {};
     sd_bus_slot *m_fullscreenMatch {};
+    sd_bus_slot *m_systemdMatch {};
     std::unordered_set<std::string> m_fullscreenOutputs;
     std::shared_ptr<CZBus> m_bus;
 };
