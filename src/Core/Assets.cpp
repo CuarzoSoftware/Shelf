@@ -156,9 +156,21 @@ std::shared_ptr<RImage> Assets::shadowedIcon(const std::shared_ptr<RImage> &icon
     if (auto it { m_shadowed.find({ icon.get(), pixels, iconPixels, scale }) }; it != m_shadowed.end() && !it->second.icon.expired())
         return it->second.image;
 
+    // Themed icons: drawn with their shadow by the AssetBroker (shared with other apps if the
+    // service is running), from their file at the exact size
+    if (m_ab)
+        if (auto src { m_sources.find(icon.get()) }; src != m_sources.end() && !src->second.image.expired())
+        {
+            const ABShadow shadow { (pixels - iconPixels) / 2, ShadowMargin(),
+                0.f, DOCK_ICON_SHADOW_OFFSET_Y / SkScalar(DOCK_TILE_SIZE_DEFAULT), DOCK_ICON_SHADOW_COLOR };
+
+            if (auto image { m_ab->icon(src->second.key, { pixels, pixels }, nullptr, &shadow) })
+                return image;
+        }
+
     std::erase_if(m_shadowed, [](const auto &pair){ return pair.second.icon.expired(); });
 
-    // The image covers the icon plus the shadow margin on each side, in pixels (scale 1): the icon
+    // Other images: drawn here. The image covers the icon plus the shadow margin on each side, in pixels (scale 1): the icon
     // is drawn at its exact size (never resampled), at a whole pixel offset (a half pixel one would
     // blur it, noticeable at scale 1).
     const Int32 size { iconPixels };

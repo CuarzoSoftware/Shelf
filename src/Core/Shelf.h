@@ -118,8 +118,24 @@ public:
     /// macOS Dock's Finder. Tracked through its org.cuarzo.Desk session bus name.
     bool deskRunning() const noexcept { return m_deskRunning; }
 
-    /// Asks Desk to open a file manager window (the Desk tile's click).
+    /// App id of Desk's windows (its folder windows): they go with the Desk tile, not an app of their own.
+    static constexpr const char *DeskAppId { "org.cuarzo.Desk" };
+
+    /// Whether @p window is one of Desk's.
+    static bool IsDeskWindow(const MForeignToplevel &window) noexcept;
+
+    /// Desk's windows, in the order they appeared.
+    const std::vector<MForeignToplevel*> &deskWindows() const noexcept { return m_deskWindows; }
+
+    /// Asks Desk to open a file manager window (the Desk tile's click with no windows, or its New Window).
     void openDeskWindow() noexcept;
+
+    /**
+     * @brief Brings up the most recent of @p windows that isn't minimized, else restores the last one.
+     *
+     * Clicking an app (or the Desk tile) with windows. Does nothing if @p windows is empty.
+     */
+    static void ActivateWindows(const std::vector<MForeignToplevel*> &windows) noexcept;
 
     /// An app is being dragged out of a dock: every screen catches the drop (see DropCatcher).
     void setAppDragging(bool dragging) noexcept;
@@ -197,6 +213,7 @@ private:
     std::vector<std::string> m_runningOrder; // Running unpinned apps, in the order they started running
     bool m_scopesRefreshQueued { false };
     std::vector<MForeignToplevel*> m_minimized;
+    std::vector<MForeignToplevel*> m_deskWindows;
     bool m_deskRunning { false };
     bool m_trashFull { false };
     bool m_appDragging { false };

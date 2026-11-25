@@ -294,21 +294,10 @@ void Dock::rebuildItems() noexcept
                     continue;
 
                 if (a.windows.empty())
-                {
                     launchApp(appId);
-                    return;
-                }
+                else
+                    Shelf::ActivateWindows(a.windows);
 
-                // Prefer a window that isn't minimized; else restore the last one.
-                MForeignToplevel *target { a.windows.back() };
-
-                for (auto it = a.windows.rbegin(); it != a.windows.rend(); it++)
-                    if (!(*it)->props().state.has(MForeignToplevel::Minimized)) { target = *it; break; }
-
-                if (target->props().state.has(MForeignToplevel::Minimized))
-                    target->setMinimized(false);
-
-                target->activate();
                 return;
             }
         };
@@ -373,7 +362,7 @@ void Dock::rebuildItems() noexcept
 
         auto item { std::make_unique<DockItem>(assets.windowIcon(), &others) };
         item->window.reset(window);
-        item->setBadge(assets.appIcon(GetShelf()->appIdOf(*window)));
+        item->setBadge(Shelf::IsDeskWindow(*window) ? assets.deskIcon() : assets.appIcon(GetShelf()->appIdOf(*window)));
 
         // A small version of the window (the compositor's, title bar included) under the app icon.
         // Kept as the generic window icon if the compositor can't capture it.
@@ -1357,11 +1346,17 @@ void Dock::syncDeskItem() noexcept
 
     m_deskItem->label = []{ return std::string("Desk"); };
     m_deskItem->setRunning(true);
-    m_deskItem->onClicked = []{ GetShelf()->openDeskWindow(); };
+    // Like Finder's: brings up its windows, or opens one if there's none
+    m_deskItem->onClicked = []{
+        auto *shelf { GetShelf() };
+
+        if (shelf->deskWindows().empty())
+            shelf->openDeskWindow();
+        else
+            Shelf::ActivateWindows(shelf->deskWindows());
+    };
     m_deskItem->onContextMenu = [this](const CZPointerButtonEvent &e){
-        openMenu(*m_deskItem, e, [](Dock &dock){
-            dock.addMenuAction("New Window", []{ GetShelf()->openDeskWindow(); });
-        });
+        openMenu(*m_deskItem, e, [](Dock &dock){ dock.buildDeskMenu(); });
     };
     // No onDragStarted: it can't be moved.
     setupItem(*m_deskItem);
@@ -1579,6 +1574,30 @@ void Dock::buildAppMenu(const std::string &appId) noexcept
         for (auto &w : windows)
             if (w) w->close();
     });
+}
+
+void Dock::buildDeskMenu() noexcept
+{
+    // Its windows (like an app's), then New Window
+    const auto &windows { GetShelf()->deskWindows() };
+
+    for (MForeignToplevel *window : windows)
+    {
+        const auto &props { window->props() };
+        auto &action { addMenuAction(props.title.empty() ? std::string("Desk") : props.title,
+            [w = CZWeak<MForeignToplevel>(window)]{
+                if (!w) return;
+                if (w->props().state.has(MForeignToplevel::Minimized))
+                    w->setMinimized(false);
+                w->activate();
+            }) };
+        action.setChecked(props.state.has(MForeignToplevel::Activated));
+    }
+
+    if (!windows.empty())
+        addMenuDivider();
+
+    addMenuAction("New Window", []{ GetShelf()->openDeskWindow(); });
 }
 
 void Dock::buildWindowMenu(MForeignToplevel *window) noexcept

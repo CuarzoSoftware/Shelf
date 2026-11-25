@@ -156,6 +156,8 @@ private:
     Int32 deskSlots() const noexcept { return m_deskItem ? 1 : 0; }
     void menuClosed() noexcept;
     void buildAppMenu(const std::string &appId) noexcept;
+    /// The Desk tile's menu: Desk's windows and New Window.
+    void buildDeskMenu() noexcept;
     void buildWindowMenu(MForeignToplevel *window) noexcept;
     void buildTrashMenu() noexcept;
     void setupItem(DockItem &item) noexcept;

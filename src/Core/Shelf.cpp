@@ -173,9 +173,16 @@ void Shelf::updateModel() noexcept
     // Unpinned apps shown: those with windows, and those running without them (an active unit) that
     // are actual apps (a desktop entry shown in menus, not e.g. an autostarted helper)
     std::vector<std::string> running;
+    m_deskWindows.clear();
 
     for (MForeignToplevel *w : m_windows)
-        running.push_back(appIdOf(*w));
+    {
+        // Desk's go with its tile
+        if (IsDeskWindow(*w))
+            m_deskWindows.push_back(w);
+        else
+            running.push_back(appIdOf(*w));
+    }
 
     for (const auto &id : m_scopedApps)
     {
@@ -209,6 +216,9 @@ void Shelf::updateModel() noexcept
 
     for (MForeignToplevel *w : m_windows)
     {
+        if (IsDeskWindow(*w))
+            continue;
+
         const std::string id { appIdOf(*w) };
         auto app { std::find_if(m_apps.begin(), m_apps.end(), [&id](const App &a){ return a.appId == id; }) };
 
@@ -453,6 +463,28 @@ void Shelf::setDeskRunning(bool running) noexcept
     m_deskRunning = running;
     Log(CZInfo, CZLN, "Desk {}", running ? "running" : "stopped");
     onWindowsChanged.notify();
+}
+
+bool Shelf::IsDeskWindow(const MForeignToplevel &window) noexcept
+{
+    return window.props().appId == DeskAppId;
+}
+
+void Shelf::ActivateWindows(const std::vector<MForeignToplevel*> &windows) noexcept
+{
+    if (windows.empty())
+        return;
+
+    // Prefer a window that isn't minimized; else restore the last one.
+    MForeignToplevel *target { windows.back() };
+
+    for (auto it = windows.rbegin(); it != windows.rend(); it++)
+        if (!(*it)->props().state.has(MForeignToplevel::Minimized)) { target = *it; break; }
+
+    if (target->props().state.has(MForeignToplevel::Minimized))
+        target->setMinimized(false);
+
+    target->activate();
 }
 
 void Shelf::openDeskWindow() noexcept
