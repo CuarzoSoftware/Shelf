@@ -27,6 +27,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace CZ { struct XDGGPU; }
+
 /**
  * @brief The dock shown on one screen: a layer surface anchored to the bottom edge.
  *
@@ -78,7 +80,8 @@ public:
     const DockMetrics &metrics() const noexcept { return m_metrics; }
 
     /// Launches an app (through its desktop entry) and bounces its icon until it shows a window.
-    void launchApp(const std::string &appId) noexcept;
+    /// On the graphics card @p gpu (see XDGGPU), if given.
+    void launchApp(const std::string &appId, const CZ::XDGGPU *gpu = nullptr) noexcept;
 
     /**
      * @brief The app wants the user's attention (e.g. a window of it appeared in another workspace,

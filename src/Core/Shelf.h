@@ -100,7 +100,7 @@ public:
     void setTileSize(Int32 tile) noexcept;
 
     /// Launches an app through its desktop entry. Returns false if it couldn't be launched.
-    bool launch(const std::string &appId) noexcept;
+    bool launch(const std::string &appId, const XDGGPU *gpu = nullptr) noexcept;
 
     /// Runs a command (argv) detached.
     static bool Spawn(const std::vector<std::string> &argv) noexcept;

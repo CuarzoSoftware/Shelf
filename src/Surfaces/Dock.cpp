@@ -20,6 +20,7 @@
 #include <CZ/AK/AKApp.h>
 #include <CZ/XDG/XDGKit.h>
 #include <CZ/XDG/XDGDesktopEntry.h>
+#include <CZ/XDG/XDGGPU.h>
 #include <filesystem>
 
 Dock::Dock(MScreen &screen) noexcept :
@@ -1256,9 +1257,9 @@ void Dock::endDrag() noexcept
 
 /* -------------------------------------- Launch bounce -------------------------------------- */
 
-void Dock::launchApp(const std::string &appId) noexcept
+void Dock::launchApp(const std::string &appId, const XDGGPU *gpu) noexcept
 {
-    if (!GetShelf()->launch(appId) || m_bounces.contains(appId))
+    if (!GetShelf()->launch(appId, gpu) || m_bounces.contains(appId))
         return;
 
     DockItem *item { nullptr };
@@ -1558,6 +1559,25 @@ void Dock::buildAppMenu(const std::string &appId) noexcept
     if (app->windows.empty())
     {
         addMenuAction("Open", [this, appId]{ launchApp(appId); });
+
+        // More than one graphics card (e.g. a laptop with dedicated graphics): on any of them. The
+        // one "Open" uses is checked: the default one, or another if the app asks for it
+        const auto &gpus { XDGGPU::List() };
+
+        if (gpus.size() > 1)
+        {
+            const auto entry { shelf->xdgkit ? shelf->xdgkit->desktopEntry(appId) : nullptr };
+            const XDGGPU *used { entry && entry->prefersNonDefaultGPU ? XDGGPU::NonDefault() : XDGGPU::Default() };
+            addMenuDivider();
+
+            for (const XDGGPU &gpu : gpus)
+                addMenuAction("Open Using " + gpu.name, [this, appId, card = gpu.card]{
+                    for (const XDGGPU &g : XDGGPU::List())
+                        if (g.card == card)
+                            return launchApp(appId, &g);
+                }).setChecked(&gpu == used);
+        }
+
         return;
     }
 

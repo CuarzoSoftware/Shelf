@@ -1,4 +1,5 @@
 #include <Core/Shelf.h>
+#include <CZ/XDG/XDGGPU.h>
 #include <CZ/Core/Utils/CZProcess.h>
 #include <Core/Log.h>
 #include <Surfaces/Dock.h>
@@ -841,7 +842,7 @@ void Shelf::setPinnedApps(const std::vector<std::string> &appIds) noexcept
     updateModel();
 }
 
-bool Shelf::launch(const std::string &appId) noexcept
+bool Shelf::launch(const std::string &appId, const XDGGPU *gpu) noexcept
 {
     auto entry { xdgkit ? xdgkit->desktopEntry(appId) : nullptr };
 
@@ -851,7 +852,8 @@ bool Shelf::launch(const std::string &appId) noexcept
         return false;
     }
 
-    if (!entry->launch())
+    // On a graphics card chosen by the user (see Dock::buildAppMenu()), or as the app prefers
+    if (!(gpu ? entry->launch(*gpu) : entry->launch()))
         return false;
 
     // The user launched it: Crystals shows its first window, wherever it opens (other windows
